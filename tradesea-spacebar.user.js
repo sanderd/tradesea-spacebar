@@ -18,10 +18,10 @@
     DEFAULT_LOCALE: 'en-US',
     ORDER_SOURCE: 'ORDER_PAD',
     COLORS: {
-      line:       '#ff00ff',
-      buyBg:      '#00d4aa',
-      sellBg:     '#ff6b9d',
-      labelText:  '#000000',
+      line: '#ff00ff',
+      buyBg: '#00d4aa',
+      sellBg: '#ff6b9d',
+      labelText: '#000000',
     },
     LABEL_HEIGHT: 20,
     LABEL_FONT: 'bold 11px Inter, system-ui, -apple-system, sans-serif',
@@ -30,36 +30,36 @@
 
   // ─── Enums ──────────────────────────────────────────────────────────
   const OrderType = { Limit: 1, Market: 2, Stop: 3, StopLimit: 4 };
-  const Side      = { Buy: 1, Sell: -1 };
+  const Side = { Buy: 1, Sell: -1 };
 
   // ─── Logging ────────────────────────────────────────────────────────
   const PREFIX = '%c[TS-Spacebar]';
-  const STYLE  = 'color:#ff00ff;font-weight:bold';
-  const log  = (...a) => CONFIG.DEBUG && console.log(PREFIX, STYLE, ...a);
+  const STYLE = 'color:#ff00ff;font-weight:bold';
+  const log = (...a) => CONFIG.DEBUG && console.log(PREFIX, STYLE, ...a);
   const warn = (...a) => console.warn(PREFIX, 'color:#FFA500;font-weight:bold', ...a);
-  const err  = (...a) => console.error(PREFIX, 'color:#FF4444;font-weight:bold', ...a);
+  const err = (...a) => console.error(PREFIX, 'color:#FF4444;font-weight:bold', ...a);
 
   // ─── State ──────────────────────────────────────────────────────────
   const services = {
-    tradingService:   null,
-    orderController:  null,
-    accountService:   null,
-    symbolService:    null,
-    quantityService:  null,  // getQuantity() / setQuantity(n)
+    tradingService: null,
+    orderController: null,
+    accountService: null,
+    symbolService: null,
+    quantityService: null,  // getQuantity() / setQuantity(n)
   };
 
-  let spaceHeld       = false;
-  let mouseY          = null;   // Y coordinate relative to pane canvas (iframe-local)
-  let mousePrice      = null;   // Snapped price at mouseY
+  let spaceHeld = false;
+  let mouseY = null;   // Y coordinate relative to pane canvas (iframe-local)
+  let mousePrice = null;   // Snapped price at mouseY
   let lastIframeMouseX = null;  // Last known mouse clientX inside iframe (always tracked)
   let lastIframeMouseY = null;  // Last known mouse clientY inside iframe (always tracked)
-  let canvas          = null;   // Overlay canvas (in MAIN document, over iframe)
-  let ctx             = null;
-  let rafId           = null;
-  let iframeEl    = null;
-  let iframeDoc   = null;
-  let iframeWin   = null;
-  let cleanupFns  = [];
+  let canvas = null;   // Overlay canvas (in MAIN document, over iframe)
+  let ctx = null;
+  let rafId = null;
+  let iframeEl = null;
+  let iframeDoc = null;
+  let iframeWin = null;
+  let cleanupFns = [];
 
   // ═══════════════════════════════════════════════════════════════════
   //  1. SYMBOL + PRICE HELPERS
@@ -143,9 +143,9 @@
       const panes = chart.getPanes();
       if (!panes || panes.length === 0) return null;
       return panes[0].getMainSourcePriceScale?.()
-          || panes[0].getRightPriceScale?.()
-          || panes[0].getLeftPriceScale?.()
-          || null;
+        || panes[0].getRightPriceScale?.()
+        || panes[0].getLeftPriceScale?.()
+        || null;
     } catch (e) { return null; }
   }
 
@@ -193,7 +193,7 @@
     if (!iframeDoc) return null;
     try {
       const container = iframeDoc.querySelector('.chart-container.active')
-                     || iframeDoc.querySelector('.chart-container');
+        || iframeDoc.querySelector('.chart-container');
       if (!container) return null;
       const wrapper = container.querySelector('.chart-gui-wrapper');
       if (wrapper) {
@@ -241,9 +241,9 @@
   function resizeCanvas() {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    canvas.width  = window.innerWidth  * dpr;
+    canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
-    canvas.style.width  = window.innerWidth  + 'px';
+    canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
@@ -269,7 +269,7 @@
         if (!chart) continue;
         const sym = chart.symbol?.() || chart.symbolExt?.()?.ticker || '';
         // Normalize: strip exchange prefixes for comparison
-        const normSym  = sym.replace(/.*:/, '');
+        const normSym = sym.replace(/.*:/, '');
         const normActive = (activeSymbol || '').replace(/.*:/, '');
         if (normSym !== normActive) continue;
 
@@ -283,8 +283,8 @@
         // Build a priceScale for this specific chart
         const panes = chart.getPanes();
         const scale = panes?.[0]?.getMainSourcePriceScale?.()
-                   || panes?.[0]?.getRightPriceScale?.()
-                   || panes?.[0]?.getLeftPriceScale?.();
+          || panes?.[0]?.getRightPriceScale?.()
+          || panes?.[0]?.getLeftPriceScale?.();
 
         results.push({
           paneRect: canvasEl.getBoundingClientRect(),
@@ -311,18 +311,18 @@
     const tickSize = getTickSize();
     if (!tickSize) return;
 
-    const ltp      = getCurrentPrice();
-    const qty      = getQty();
+    const ltp = getCurrentPrice();
+    const qty = getQty();
     const priceStr = formatPrice(mousePrice, tickSize);
-    const sym      = getActiveSymbol();
+    const sym = getActiveSymbol();
 
     // Determine order types based on price vs current market
     let buyType, sellType;
     if (ltp != null) {
-      buyType  = mousePrice < ltp ? 'LIMIT' : 'STOP';
+      buyType = mousePrice < ltp ? 'LIMIT' : 'STOP';
       sellType = mousePrice > ltp ? 'LIMIT' : 'STOP';
     } else {
-      buyType  = 'LIMIT';
+      buyType = 'LIMIT';
       sellType = 'STOP';
     }
 
@@ -349,10 +349,10 @@
 
       // Map to main-doc coordinates
       const drawY = iframeRect.top + paneRect.top + paneY;
-      const clipTop    = iframeRect.top + paneRect.top;
+      const clipTop = iframeRect.top + paneRect.top;
       const clipBottom = iframeRect.top + paneRect.top + paneRect.height;
-      const clipLeft   = iframeRect.left + paneRect.left;
-      const clipRight  = iframeRect.left + paneRect.left + paneRect.width;
+      const clipLeft = iframeRect.left + paneRect.left;
+      const clipRight = iframeRect.left + paneRect.left + paneRect.width;
 
       if (drawY < clipTop || drawY > clipBottom) continue;
 
@@ -365,7 +365,7 @@
       // ── Magenta horizontal line ─────────────────────────────
       ctx.beginPath();
       ctx.strokeStyle = CONFIG.COLORS.line;
-      ctx.lineWidth   = 1.5;
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 3]);
       ctx.moveTo(clipLeft, drawY);
       ctx.lineTo(clipRight, drawY);
@@ -377,8 +377,8 @@
       const halfH = CONFIG.LABEL_HEIGHT / 2;
 
       const buyText = `BUY ${buyType} ${priceStr}`;
-      const buyW    = ctx.measureText(buyText).width + 16;
-      const labelX  = clipLeft + 8;
+      const buyW = ctx.measureText(buyText).width + 16;
+      const labelX = clipLeft + 8;
 
       ctx.fillStyle = CONFIG.COLORS.buyBg;
       ctx.fillRect(labelX, drawY - halfH, buyW, CONFIG.LABEL_HEIGHT);
@@ -387,8 +387,8 @@
       ctx.fillText(buyText, labelX + 8, drawY);
 
       const sellText = `SELL ${sellType} ${priceStr}`;
-      const sellW    = ctx.measureText(sellText).width + 16;
-      const sellX    = labelX + buyW + 6;
+      const sellW = ctx.measureText(sellText).width + 16;
+      const sellX = labelX + buyW + 6;
 
       ctx.fillStyle = CONFIG.COLORS.sellBg;
       ctx.fillRect(sellX, drawY - halfH, sellW, CONFIG.LABEL_HEIGHT);
@@ -397,8 +397,8 @@
 
       // ── Lot size indicator ──────────────────────────────────
       const qtyText = `${qty} lot${qty !== 1 ? 's' : ''}`;
-      const qtyW    = ctx.measureText(qtyText).width + 12;
-      const qtyX    = sellX + sellW + 6;
+      const qtyW = ctx.measureText(qtyText).width + 12;
+      const qtyX = sellX + sellW + 6;
       ctx.fillStyle = 'rgba(60,60,70,1)';
       ctx.fillRect(qtyX, drawY - halfH, qtyW, CONFIG.LABEL_HEIGHT);
       ctx.fillStyle = '#ffffff';
@@ -453,10 +453,10 @@
     const sym = getActiveSymbol();
     if (!sym) { err('No active symbol'); return; }
 
-    const ltp      = getCurrentPrice();
-    const qty      = getQty();
+    const ltp = getCurrentPrice();
+    const qty = getQty();
     const tickSize = getTickSize();
-    const snapped  = tickSize ? snapPrice(price, tickSize) : price;
+    const snapped = tickSize ? snapPrice(price, tickSize) : price;
 
     // Determine order type
     let orderType;
@@ -468,16 +468,16 @@
 
     const order = {
       symbol: sym,
-      side:   side === 'buy' ? Side.Buy : Side.Sell,
-      type:   orderType,
+      side: side === 'buy' ? Side.Buy : Side.Sell,
+      type: orderType,
       qty,
     };
 
     if (orderType === OrderType.Limit) order.limitPrice = snapped;
-    if (orderType === OrderType.Stop)  order.stopPrice  = snapped;
+    if (orderType === OrderType.Stop) order.stopPrice = snapped;
 
     const typeName = orderType === OrderType.Limit ? 'LIMIT' : 'STOP';
-    const shortSym = sym.replace('CME-Delayed:', '');
+    const shortSym = sym.replace(/^[^:]+:/, '');
     log(`${side.toUpperCase()} ${typeName} ${qty}x ${shortSym} @ ${formatPrice(snapped, tickSize || 0.01)} (LTP: ${ltp})`);
 
     try {
@@ -502,7 +502,7 @@
     if (!paneRect) return;
 
     if (lastIframeMouseX < paneRect.left || lastIframeMouseX > paneRect.left + paneRect.width ||
-        lastIframeMouseY < paneRect.top  || lastIframeMouseY > paneRect.top + paneRect.height) {
+      lastIframeMouseY < paneRect.top || lastIframeMouseY > paneRect.top + paneRect.height) {
       mousePrice = null;
       return;
     }
@@ -589,11 +589,11 @@
   async function discoverServices(mod) {
     for (const [, val] of Object.entries(mod)) {
       if (!val || typeof val !== 'object') continue;
-      try { if (!services.tradingService   && typeof val.placeOrder === 'function')       services.tradingService   = val; } catch (e) {}
-      try { if (!services.orderController  && typeof val.handlePlaceOrder === 'function')  services.orderController  = val; } catch (e) {}
-      try { if (!services.accountService   && typeof val.getCurrentAccount === 'function') services.accountService   = val; } catch (e) {}
-      try { if (!services.symbolService    && typeof val.getCurrentSymbol === 'function' && typeof val.getTickSize === 'function') services.symbolService = val; } catch (e) {}
-      try { if (!services.quantityService  && typeof val.getQuantity === 'function' && typeof val.setQuantity === 'function') services.quantityService = val; } catch (e) {}
+      try { if (!services.tradingService && typeof val.placeOrder === 'function') services.tradingService = val; } catch (e) { }
+      try { if (!services.orderController && typeof val.handlePlaceOrder === 'function') services.orderController = val; } catch (e) { }
+      try { if (!services.accountService && typeof val.getCurrentAccount === 'function') services.accountService = val; } catch (e) { }
+      try { if (!services.symbolService && typeof val.getCurrentSymbol === 'function' && typeof val.getTickSize === 'function') services.symbolService = val; } catch (e) { }
+      try { if (!services.quantityService && typeof val.getQuantity === 'function' && typeof val.setQuantity === 'function') services.quantityService = val; } catch (e) { }
     }
     return !!(services.tradingService && services.accountService);
   }
@@ -601,28 +601,28 @@
   function attachEventListeners() {
     // Main window — spacebar (works even when iframe has focus because capture phase)
     window.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('keyup',   onKeyUp,   true);
-    window.addEventListener('resize',  resizeCanvas);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('resize', resizeCanvas);
     cleanupFns.push(() => {
       window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup',   onKeyUp,   true);
-      window.removeEventListener('resize',  resizeCanvas);
+      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('resize', resizeCanvas);
     });
 
     // Iframe — mouse events + keyboard backup + context menu suppression
     if (iframeWin) {
-      iframeWin.addEventListener('keydown',     onKeyDown,          true);
-      iframeWin.addEventListener('keyup',        onKeyUp,            true);
-      iframeWin.addEventListener('mousemove',    onIframeMouseMove,  true);
-      iframeWin.addEventListener('mousedown',    onIframeMouseDown,  true);
-      iframeWin.addEventListener('contextmenu',  onContextMenu,      true);
+      iframeWin.addEventListener('keydown', onKeyDown, true);
+      iframeWin.addEventListener('keyup', onKeyUp, true);
+      iframeWin.addEventListener('mousemove', onIframeMouseMove, true);
+      iframeWin.addEventListener('mousedown', onIframeMouseDown, true);
+      iframeWin.addEventListener('contextmenu', onContextMenu, true);
 
       cleanupFns.push(() => {
-        iframeWin.removeEventListener('keydown',     onKeyDown,          true);
-        iframeWin.removeEventListener('keyup',        onKeyUp,            true);
-        iframeWin.removeEventListener('mousemove',    onIframeMouseMove,  true);
-        iframeWin.removeEventListener('mousedown',    onIframeMouseDown,  true);
-        iframeWin.removeEventListener('contextmenu',  onContextMenu,      true);
+        iframeWin.removeEventListener('keydown', onKeyDown, true);
+        iframeWin.removeEventListener('keyup', onKeyUp, true);
+        iframeWin.removeEventListener('mousemove', onIframeMouseMove, true);
+        iframeWin.removeEventListener('mousedown', onIframeMouseDown, true);
+        iframeWin.removeEventListener('contextmenu', onContextMenu, true);
       });
     }
   }
@@ -678,7 +678,7 @@
     log('Services:',
       'Trading:', !!services.tradingService,
       'Account:', !!services.accountService,
-      'Symbol:',  !!services.symbolService,
+      'Symbol:', !!services.symbolService,
       'Quantity:', !!services.quantityService,
       'Controller:', !!services.orderController
     );
@@ -686,7 +686,7 @@
     // 2. Wait for TradingView iframe
     try {
       const { iframe, doc, win } = await waitForIframe();
-      iframeEl  = iframe;
+      iframeEl = iframe;
       iframeDoc = doc;
       iframeWin = win;
       log('Iframe ready');
@@ -700,14 +700,14 @@
 
     // 6. Expose API
     window.tsSpacebar = {
-      get active()  { return spaceHeld; },
-      get price()   { return mousePrice; },
-      get ltp()     { return getCurrentPrice(); },
-      get symbol()  { return getActiveSymbol(); },
-      get qty()     { return getQty(); },
-      set qty(n)    { services.orderController?.setQuantity(n); },
+      get active() { return spaceHeld; },
+      get price() { return mousePrice; },
+      get ltp() { return getCurrentPrice(); },
+      get symbol() { return getActiveSymbol(); },
+      get qty() { return getQty(); },
+      set qty(n) { services.orderController?.setQuantity(n); },
       get tickSize() { return getTickSize(); },
-      get ready()   { return !!(services.tradingService && services.accountService && iframeDoc); },
+      get ready() { return !!(services.tradingService && services.accountService && iframeDoc); },
       destroy() {
         cleanupFns.forEach(fn => fn());
         cleanupFns = [];
