@@ -438,7 +438,7 @@
 
     settingsBtn = document.createElement('button');
     settingsBtn.id = 'ts-sb-btn';
-    settingsBtn.innerHTML = '\u2699';
+    settingsBtn.innerHTML = '🚀';
     settingsBtn.title = 'Spacebar Trading Settings';
     settingsBtn.addEventListener('click', openSettings);
 
