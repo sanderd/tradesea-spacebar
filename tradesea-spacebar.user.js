@@ -66,10 +66,11 @@
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
-  const CONFIG_VERSION = 1;
+  const CONFIG_VERSION = 2;
 
   const DEFAULT_CONFIG = {
-    version: 1,
+    version: 2,
+    hotkeyWithoutSpacebar: true,
     contractSlots: [
       { qty: 1, hotkey: null },
       { qty: 2, hotkey: null },
@@ -80,7 +81,13 @@
   };
 
   // Each entry: { fromVersion, toVersion, migrate(cfg) → cfg }
-  const MIGRATIONS = [];
+  const MIGRATIONS = [
+    { fromVersion: 1, toVersion: 2, migrate: (cfg) => {
+      cfg.version = 2;
+      cfg.hotkeyWithoutSpacebar = true;
+      return cfg;
+    }},
+  ];
 
   function applyMigrations(cfg) {
     if (!cfg.version) cfg.version = 0;
@@ -493,8 +500,15 @@
           <button class="ts-sb-close" id="ts-sb-close">\u2715</button>
         </div>
         <div class="ts-sb-section-label">Contract Sizes</div>
-        <div class="ts-sb-subtitle">Hold spacebar + press hotkey to switch size instantly</div>
+        <div class="ts-sb-subtitle">Press hotkey to switch size instantly</div>
         ${rows}
+        <div class="ts-sb-row" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05)">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;color:#aaa">
+            <input type="checkbox" id="ts-sb-global-hk" ${cfg.hotkeyWithoutSpacebar ? 'checked' : ''}
+                   style="accent-color:#ff00ff;width:16px;height:16px;cursor:pointer">
+            Hotkeys work without holding spacebar
+          </label>
+        </div>
         <div class="ts-sb-actions">
           <button class="ts-sb-btn-cancel" id="ts-sb-cancel">Cancel</button>
           <button class="ts-sb-btn-save" id="ts-sb-save">Save</button>
@@ -511,6 +525,7 @@
     // Save handler
     settingsOverlay.querySelector('#ts-sb-save').addEventListener('click', () => {
       const newCfg = structuredClone(DEFAULT_CONFIG);
+      newCfg.hotkeyWithoutSpacebar = settingsOverlay.querySelector('#ts-sb-global-hk')?.checked ?? true;
       settingsOverlay.querySelectorAll('.ts-sb-qty').forEach(inp => {
         const i = parseInt(inp.dataset.slot);
         newCfg.contractSlots[i].qty = Math.max(1, parseInt(inp.value) || 1);
@@ -836,13 +851,19 @@
       return;
     }
 
-    // Contract-size hotkeys while spacebar is held
-    if (spaceHeld && userConfig) {
-      const slot = userConfig.contractSlots.find(s => s.hotkey === e.code);
-      if (slot) {
-        e.preventDefault();
-        e.stopPropagation();
-        setContractSize(slot.qty);
+    // Contract-size hotkeys (during spacebar, or globally if enabled)
+    if (userConfig && (spaceHeld || userConfig.hotkeyWithoutSpacebar)) {
+      // Skip if a text input / textarea / contenteditable is focused
+      const tag = (e.target?.tagName || '').toLowerCase();
+      const editable = tag === 'input' || tag === 'textarea' || tag === 'select'
+        || e.target?.isContentEditable;
+      if (!editable) {
+        const slot = userConfig.contractSlots.find(s => s.hotkey === e.code);
+        if (slot) {
+          e.preventDefault();
+          e.stopPropagation();
+          setContractSize(slot.qty);
+        }
       }
     }
   }
