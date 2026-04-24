@@ -46,6 +46,8 @@
     accountService: null,
     symbolService: null,
     quantityService: null,  // getQuantity() / setQuantity(n)
+    positionService: null,  // getPositions() / getPositionBySymbol()
+    instrumentService: null, // getInstrumentBySymbol() / getSelectedInstrument()
   };
 
   let spaceHeld = false;
@@ -66,11 +68,12 @@
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
-  const CONFIG_VERSION = 2;
+  const CONFIG_VERSION = 3;
 
   const DEFAULT_CONFIG = {
-    version: 2,
+    version: 3,
     hotkeyWithoutSpacebar: true,
+    breakevenHotkey: null,
     contractSlots: [
       { qty: 1, hotkey: null },
       { qty: 2, hotkey: null },
@@ -85,6 +88,11 @@
     { fromVersion: 1, toVersion: 2, migrate: (cfg) => {
       cfg.version = 2;
       cfg.hotkeyWithoutSpacebar = true;
+      return cfg;
+    }},
+    { fromVersion: 2, toVersion: 3, migrate: (cfg) => {
+      cfg.version = 3;
+      cfg.breakevenHotkey = null;
       return cfg;
     }},
   ];
@@ -147,6 +155,51 @@
       try { services.quantityService.setQuantity(qty); } catch (e) { /* */ }
     }
     log(`Contract size → ${qty}`);
+  }
+
+  /**
+   * Move the active position's stop loss to the average entry price (break-even).
+   * Replicates the TradeSea context-menu "Stop Loss at B/E" action.
+   */
+  async function moveStopToBreakeven() {
+    if (!services.tradingService || !services.positionService || !services.instrumentService || !services.accountService) {
+      err('Break-even: required services not ready');
+      return;
+    }
+    const sym = getActiveSymbol();
+    if (!sym) { err('Break-even: no active symbol'); return; }
+
+    let pos;
+    try {
+      pos = services.positionService.getPositionBySymbol?.(sym)
+        || services.positionService.getPositions?.()?.find(p => p.symbol === sym);
+    } catch (e) { /* */ }
+    if (!pos) { warn('Break-even: no open position for', sym); return; }
+
+    let instr;
+    try { instr = services.instrumentService.getInstrumentBySymbol?.(pos.symbol); } catch (e) { /* */ }
+    const minTick = instr?.minTick || getTickSize() || 0.01;
+
+    // Round avgPrice to nearest tick on the safe side
+    const isLong = pos.side === 1;
+    const bePrice = isLong
+      ? Math.ceil(pos.avgPrice / minTick) * minTick   // round UP for longs
+      : Math.floor(pos.avgPrice / minTick) * minTick;  // round DOWN for shorts
+
+    const acct = services.accountService.getCurrentAccount();
+    if (!acct) { err('Break-even: no account'); return; }
+
+    const shortSym = sym.replace(/^[^:]+:/, '');
+    log(`Break-even: ${shortSym} SL → ${bePrice} (avg ${pos.avgPrice})`);
+
+    try {
+      await services.tradingService.editPositionBrackets(
+        pos.id, { stopLoss: bePrice }, acct.id, CONFIG.DEFAULT_LOCALE, CONFIG.ORDER_SOURCE
+      );
+      log('✅ Break-even SL set');
+    } catch (e) {
+      err('Break-even failed:', e.message);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -502,11 +555,19 @@
         <div class="ts-sb-section-label">Contract Sizes</div>
         <div class="ts-sb-subtitle">Press hotkey to switch size instantly</div>
         ${rows}
+        <div class="ts-sb-section-label" style="margin-top:18px">Actions</div>
+        <div class="ts-sb-row">
+          <span class="slot-label" style="width:auto;min-width:80px">Break-even</span>
+          <input type="text" class="ts-sb-hk" id="ts-sb-be-hk" data-code="${cfg.breakevenHotkey || ''}"
+                 value="${formatKeyDisplay(cfg.breakevenHotkey)}" placeholder="Click \u2192 press key" readonly>
+          <button class="ts-sb-clear" id="ts-sb-be-clear" title="Clear hotkey">\u2715</button>
+          <span class="ts-sb-lots">Move SL to avg entry</span>
+        </div>
         <div class="ts-sb-row" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05)">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;color:#aaa">
             <input type="checkbox" id="ts-sb-global-hk" ${cfg.hotkeyWithoutSpacebar ? 'checked' : ''}
                    style="accent-color:#ff00ff;width:16px;height:16px;cursor:pointer">
-            Hotkeys work without holding spacebar
+            Lot-size hotkeys work without holding spacebar
           </label>
         </div>
         <div class="ts-sb-actions">
@@ -526,11 +587,12 @@
     settingsOverlay.querySelector('#ts-sb-save').addEventListener('click', () => {
       const newCfg = structuredClone(DEFAULT_CONFIG);
       newCfg.hotkeyWithoutSpacebar = settingsOverlay.querySelector('#ts-sb-global-hk')?.checked ?? true;
+      newCfg.breakevenHotkey = settingsOverlay.querySelector('#ts-sb-be-hk')?.dataset?.code || null;
       settingsOverlay.querySelectorAll('.ts-sb-qty').forEach(inp => {
         const i = parseInt(inp.dataset.slot);
         newCfg.contractSlots[i].qty = Math.max(1, parseInt(inp.value) || 1);
       });
-      settingsOverlay.querySelectorAll('.ts-sb-hk').forEach(inp => {
+      settingsOverlay.querySelectorAll('.ts-sb-hk:not(#ts-sb-be-hk)').forEach(inp => {
         const i = parseInt(inp.dataset.slot);
         newCfg.contractSlots[i].hotkey = inp.dataset.code || null;
       });
@@ -554,12 +616,18 @@
       });
     });
 
-    // Clear hotkey buttons
-    settingsOverlay.querySelectorAll('.ts-sb-clear').forEach(btn => {
+    // Clear hotkey buttons (contract slots)
+    settingsOverlay.querySelectorAll('.ts-sb-clear[data-slot]').forEach(btn => {
       btn.addEventListener('click', () => {
         const inp = settingsOverlay.querySelector(`.ts-sb-hk[data-slot="${btn.dataset.slot}"]`);
         if (inp) { inp.value = ''; inp.dataset.code = ''; }
       });
+    });
+
+    // Clear break-even hotkey
+    settingsOverlay.querySelector('#ts-sb-be-clear')?.addEventListener('click', () => {
+      const inp = settingsOverlay.querySelector('#ts-sb-be-hk');
+      if (inp) { inp.value = ''; inp.dataset.code = ''; }
     });
   }
 
@@ -851,19 +919,27 @@
       return;
     }
 
-    // Contract-size hotkeys (during spacebar, or globally if enabled)
+    // Skip hotkey processing if a text field is focused
+    const tag = (e.target?.tagName || '').toLowerCase();
+    const editable = tag === 'input' || tag === 'textarea' || tag === 'select'
+      || e.target?.isContentEditable;
+    if (editable) return;
+
+    // Break-even hotkey — always active (no spacebar required)
+    if (userConfig?.breakevenHotkey && e.code === userConfig.breakevenHotkey) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveStopToBreakeven();
+      return;
+    }
+
+    // Contract-size hotkeys — only during spacebar, unless hotkeyWithoutSpacebar is on
     if (userConfig && (spaceHeld || userConfig.hotkeyWithoutSpacebar)) {
-      // Skip if a text input / textarea / contenteditable is focused
-      const tag = (e.target?.tagName || '').toLowerCase();
-      const editable = tag === 'input' || tag === 'textarea' || tag === 'select'
-        || e.target?.isContentEditable;
-      if (!editable) {
-        const slot = userConfig.contractSlots.find(s => s.hotkey === e.code);
-        if (slot) {
-          e.preventDefault();
-          e.stopPropagation();
-          setContractSize(slot.qty);
-        }
+      const slot = userConfig.contractSlots.find(s => s.hotkey === e.code);
+      if (slot) {
+        e.preventDefault();
+        e.stopPropagation();
+        setContractSize(slot.qty);
       }
     }
   }
@@ -935,6 +1011,8 @@
       try { if (!services.accountService && typeof val.getCurrentAccount === 'function') services.accountService = val; } catch (e) { }
       try { if (!services.symbolService && typeof val.getCurrentSymbol === 'function' && typeof val.getTickSize === 'function') services.symbolService = val; } catch (e) { }
       try { if (!services.quantityService && typeof val.getQuantity === 'function' && typeof val.setQuantity === 'function') services.quantityService = val; } catch (e) { }
+      try { if (!services.positionService && typeof val.getPositions === 'function' && typeof val.getPositionBySymbol === 'function') services.positionService = val; } catch (e) { }
+      try { if (!services.instrumentService && typeof val.getInstrumentBySymbol === 'function' && typeof val.getSelectedInstrument === 'function') services.instrumentService = val; } catch (e) { }
     }
     return !!(services.tradingService && services.accountService);
   }
@@ -1021,6 +1099,8 @@
       'Account:', !!services.accountService,
       'Symbol:', !!services.symbolService,
       'Quantity:', !!services.quantityService,
+      'Position:', !!services.positionService,
+      'Instrument:', !!services.instrumentService,
       'Controller:', !!services.orderController
     );
 
