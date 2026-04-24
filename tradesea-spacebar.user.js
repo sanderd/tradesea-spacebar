@@ -60,6 +60,87 @@
   let iframeDoc = null;
   let iframeWin = null;
   let cleanupFns = [];
+  let userConfig = null;      // Loaded from localStorage
+  let settingsOverlay = null; // Settings modal element
+  let settingsBtn = null;     // Sidebar gear button
+
+  // ─── Persisted Configuration ───────────────────────────────────────
+  const STORAGE_KEY = 'ts-spacebar-config';
+  const CONFIG_VERSION = 1;
+
+  const DEFAULT_CONFIG = {
+    version: 1,
+    contractSlots: [
+      { qty: 1, hotkey: null },
+      { qty: 2, hotkey: null },
+      { qty: 3, hotkey: null },
+      { qty: 4, hotkey: null },
+      { qty: 5, hotkey: null },
+    ],
+  };
+
+  // Each entry: { fromVersion, toVersion, migrate(cfg) → cfg }
+  const MIGRATIONS = [];
+
+  function applyMigrations(cfg) {
+    if (!cfg.version) cfg.version = 0;
+    let changed = false;
+    for (const m of MIGRATIONS) {
+      if (cfg.version === m.fromVersion) {
+        cfg = m.migrate(cfg);
+        changed = true;
+      }
+    }
+    if (cfg.version < CONFIG_VERSION) {
+      warn(`Config v${cfg.version} cannot migrate to v${CONFIG_VERSION}, resetting`);
+      return structuredClone(DEFAULT_CONFIG);
+    }
+    if (changed) saveConfig(cfg);
+    return cfg;
+  }
+
+  function loadConfig() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return structuredClone(DEFAULT_CONFIG);
+      return applyMigrations(JSON.parse(raw));
+    } catch (e) {
+      warn('Config load failed, using defaults:', e.message);
+      return structuredClone(DEFAULT_CONFIG);
+    }
+  }
+
+  function saveConfig(cfg) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+      log('Config saved');
+    } catch (e) { err('Config save failed:', e.message); }
+  }
+
+  function formatKeyDisplay(code) {
+    if (!code) return '';
+    if (code.startsWith('Digit')) return code.slice(5);
+    if (code.startsWith('Key')) return code.slice(3);
+    if (code.startsWith('Numpad')) return 'Num ' + code.slice(6);
+    if (code === 'Backquote') return '`';
+    if (code === 'Minus') return '-';
+    if (code === 'Equal') return '=';
+    if (code === 'BracketLeft') return '[';
+    if (code === 'BracketRight') return ']';
+    if (code === 'Semicolon') return ';';
+    if (code === 'Quote') return "'";
+    if (code === 'Comma') return ',';
+    if (code === 'Period') return '.';
+    if (code === 'Slash') return '/';
+    return code;
+  }
+
+  function setContractSize(qty) {
+    if (services.quantityService) {
+      try { services.quantityService.setQuantity(qty); } catch (e) { /* */ }
+    }
+    log(`Contract size → ${qty}`);
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   //  1. SYMBOL + PRICE HELPERS
@@ -246,6 +327,232 @@
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  4b. SETTINGS UI
+  // ═══════════════════════════════════════════════════════════════════
+
+  const SETTINGS_CSS = `
+    #ts-sb-btn {
+      width: 100%; height: 40px; border-radius: 8px;
+      background: transparent; border: 1px solid transparent;
+      color: #ff00ff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; transition: all .2s ease;
+      margin-bottom: 8px;
+    }
+    #ts-sb-btn:hover {
+      background: rgba(255,0,255,0.1); border-color: rgba(255,0,255,0.3);
+    }
+    #ts-sb-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(6px);
+      z-index: 1000000; display: flex; align-items: center; justify-content: center;
+    }
+    #ts-sb-panel {
+      background: rgba(18,18,28,0.97); border: 1px solid rgba(255,0,255,0.2);
+      border-radius: 16px; padding: 28px 32px; min-width: 440px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(255,0,255,0.08);
+      font-family: Inter, system-ui, -apple-system, sans-serif; color: #d8d8e4;
+    }
+    #ts-sb-panel h2 {
+      margin: 0 0 4px 0; font-size: 15px; color: #ff00ff; font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .ts-sb-subtitle {
+      font-size: 11px; color: #666; margin-bottom: 18px;
+    }
+    .ts-sb-section-label {
+      font-size: 11px; color: #888; text-transform: uppercase;
+      letter-spacing: 1.2px; margin-bottom: 10px;
+    }
+    .ts-sb-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+    }
+    .ts-sb-row span.slot-label {
+      width: 44px; font-size: 12px; color: #666; flex-shrink: 0;
+    }
+    .ts-sb-qty {
+      width: 60px; padding: 6px 8px; border-radius: 8px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #e0e0ec; font-size: 13px; text-align: center;
+      font-family: inherit; outline: none; transition: border-color .15s;
+      -moz-appearance: textfield;
+    }
+    .ts-sb-qty::-webkit-inner-spin-button,
+    .ts-sb-qty::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .ts-sb-qty:focus { border-color: rgba(255,0,255,0.4); }
+    .ts-sb-hk {
+      width: 120px; padding: 6px 10px; border-radius: 8px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #c8c8d8; font-size: 12px; text-align: center;
+      font-family: inherit; outline: none; cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .ts-sb-hk:focus {
+      border-color: rgba(255,0,255,0.5); background: rgba(255,0,255,0.06);
+    }
+    .ts-sb-hk::placeholder { color: #555; }
+    .ts-sb-clear {
+      width: 24px; height: 24px; border-radius: 6px; border: none;
+      background: transparent; color: #555; cursor: pointer;
+      font-size: 13px; display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .ts-sb-clear:hover { background: rgba(255,80,80,0.15); color: #ff5555; }
+    .ts-sb-lots { font-size: 11px; color: #555; flex-shrink: 0; }
+    .ts-sb-actions {
+      display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px;
+      padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .ts-sb-btn-cancel, .ts-sb-btn-save {
+      padding: 7px 20px; border-radius: 8px; border: none;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: all .15s;
+    }
+    .ts-sb-btn-cancel {
+      background: rgba(50,50,60,0.8); color: #999;
+    }
+    .ts-sb-btn-cancel:hover { background: rgba(60,60,70,0.9); color: #bbb; }
+    .ts-sb-btn-save {
+      background: rgba(255,0,255,0.15); color: #ff00ff;
+      border: 1px solid rgba(255,0,255,0.3);
+    }
+    .ts-sb-btn-save:hover {
+      background: rgba(255,0,255,0.25); border-color: rgba(255,0,255,0.5);
+    }
+    .ts-sb-close {
+      background: none; border: none; color: #666; font-size: 18px;
+      cursor: pointer; padding: 4px 8px; border-radius: 6px;
+      transition: all .15s; line-height: 1;
+    }
+    .ts-sb-close:hover { color: #ff5555; background: rgba(255,80,80,0.1); }
+  `;
+
+  function createSettingsUI() {
+    const style = document.createElement('style');
+    style.id = 'ts-sb-style';
+    style.textContent = SETTINGS_CSS;
+    document.head.appendChild(style);
+
+    settingsBtn = document.createElement('button');
+    settingsBtn.id = 'ts-sb-btn';
+    settingsBtn.innerHTML = '\u2699';
+    settingsBtn.title = 'Spacebar Trading Settings';
+    settingsBtn.addEventListener('click', openSettings);
+
+    // Insert into the sidebar DOM between Account Center and Logout
+    const sidebarBottom = document.querySelector('aside > div.border-t');
+    const logoutBtn = sidebarBottom?.querySelector('#logout-btn, button[aria-label="Logout"]');
+    if (sidebarBottom && logoutBtn) {
+      sidebarBottom.insertBefore(settingsBtn, logoutBtn);
+    } else if (sidebarBottom) {
+      sidebarBottom.appendChild(settingsBtn);
+    } else {
+      // Fallback: fixed position if sidebar not found
+      settingsBtn.style.cssText = 'position:fixed;bottom:80px;left:12px;width:36px;height:36px;z-index:999998;';
+      document.body.appendChild(settingsBtn);
+    }
+    log('Settings button created');
+  }
+
+  function destroySettingsUI() {
+    closeSettings();
+    if (settingsBtn && settingsBtn.parentNode) settingsBtn.parentNode.removeChild(settingsBtn);
+    settingsBtn = null;
+    const style = document.getElementById('ts-sb-style');
+    if (style) style.remove();
+  }
+
+  function openSettings() {
+    if (settingsOverlay) return;
+    const cfg = loadConfig();
+
+    settingsOverlay = document.createElement('div');
+    settingsOverlay.id = 'ts-sb-backdrop';
+
+    let rows = '';
+    for (let i = 0; i < 5; i++) {
+      const s = cfg.contractSlots[i] || { qty: i + 1, hotkey: null };
+      rows += `
+        <div class="ts-sb-row">
+          <span class="slot-label">Slot ${i + 1}</span>
+          <input type="number" class="ts-sb-qty" data-slot="${i}" value="${s.qty}" min="1" max="999">
+          <span class="ts-sb-lots">lots</span>
+          <input type="text" class="ts-sb-hk" data-slot="${i}" data-code="${s.hotkey || ''}"
+                 value="${formatKeyDisplay(s.hotkey)}" placeholder="Click \u2192 press key" readonly>
+          <button class="ts-sb-clear" data-slot="${i}" title="Clear hotkey">\u2715</button>
+        </div>`;
+    }
+
+    settingsOverlay.innerHTML = `
+      <div id="ts-sb-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h2>\u2699\uFE0F Spacebar Trading Settings</h2>
+          <button class="ts-sb-close" id="ts-sb-close">\u2715</button>
+        </div>
+        <div class="ts-sb-section-label">Contract Sizes</div>
+        <div class="ts-sb-subtitle">Hold spacebar + press hotkey to switch size instantly</div>
+        ${rows}
+        <div class="ts-sb-actions">
+          <button class="ts-sb-btn-cancel" id="ts-sb-cancel">Cancel</button>
+          <button class="ts-sb-btn-save" id="ts-sb-save">Save</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(settingsOverlay);
+
+    // Close handlers
+    settingsOverlay.querySelector('#ts-sb-close').addEventListener('click', closeSettings);
+    settingsOverlay.querySelector('#ts-sb-cancel').addEventListener('click', closeSettings);
+    settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
+
+    // Save handler
+    settingsOverlay.querySelector('#ts-sb-save').addEventListener('click', () => {
+      const newCfg = structuredClone(DEFAULT_CONFIG);
+      settingsOverlay.querySelectorAll('.ts-sb-qty').forEach(inp => {
+        const i = parseInt(inp.dataset.slot);
+        newCfg.contractSlots[i].qty = Math.max(1, parseInt(inp.value) || 1);
+      });
+      settingsOverlay.querySelectorAll('.ts-sb-hk').forEach(inp => {
+        const i = parseInt(inp.dataset.slot);
+        newCfg.contractSlots[i].hotkey = inp.dataset.code || null;
+      });
+      saveConfig(newCfg);
+      userConfig = newCfg;
+      closeSettings();
+    });
+
+    // Hotkey recording on focus + keydown
+    settingsOverlay.querySelectorAll('.ts-sb-hk').forEach(inp => {
+      inp.addEventListener('keydown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.code === 'Escape') { inp.blur(); return; }
+        if (e.code === 'Backspace' || e.code === 'Delete') {
+          inp.value = ''; inp.dataset.code = ''; return;
+        }
+        if (e.code === 'Space') return; // Reserved
+        inp.value = formatKeyDisplay(e.code);
+        inp.dataset.code = e.code;
+      });
+    });
+
+    // Clear hotkey buttons
+    settingsOverlay.querySelectorAll('.ts-sb-clear').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const inp = settingsOverlay.querySelector(`.ts-sb-hk[data-slot="${btn.dataset.slot}"]`);
+        if (inp) { inp.value = ''; inp.dataset.code = ''; }
+      });
+    });
+  }
+
+  function closeSettings() {
+    if (settingsOverlay && settingsOverlay.parentNode) {
+      settingsOverlay.parentNode.removeChild(settingsOverlay);
+    }
+    settingsOverlay = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -517,13 +824,26 @@
   }
 
   function onKeyDown(e) {
+    if (settingsOverlay) return; // Don't intercept while settings open
+
     if (e.code === 'Space' && !e.repeat) {
       e.preventDefault();
       e.stopPropagation();
       spaceHeld = true;
       ensureCanvas();
-      resolveMousePrice();  // Immediately show line at current mouse position
+      resolveMousePrice();
       log('Quick-order mode ON');
+      return;
+    }
+
+    // Contract-size hotkeys while spacebar is held
+    if (spaceHeld && userConfig) {
+      const slot = userConfig.contractSlots.find(s => s.hotkey === e.code);
+      if (slot) {
+        e.preventDefault();
+        e.stopPropagation();
+        setContractSize(slot.qty);
+      }
     }
   }
 
@@ -692,7 +1012,11 @@
       log('Iframe ready');
     } catch (e) { err(e.message); return; }
 
-    // 3. Attach event listeners
+    // 3. Load config & create settings UI
+    userConfig = loadConfig();
+    createSettingsUI();
+
+    // 4. Attach event listeners
     attachEventListeners();
 
     // 5. Start draw loop
@@ -714,6 +1038,7 @@
         if (rafId) cancelAnimationFrame(rafId);
         if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
         canvas = null; ctx = null;
+        destroySettingsUI();
         spaceHeld = false;
         delete window.tsSpacebar;
         log('Destroyed');
