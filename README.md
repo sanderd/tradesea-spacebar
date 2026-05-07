@@ -10,6 +10,10 @@ A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea.
 - **Break-even hotkey** -- move stop loss to average entry with a single keypress
 - **Visual overlay** -- magenta crosshair with buy/sell labels rendered across all charts showing the same symbol
 
+## Demo video
+
+https://youtu.be/-D2Mv_recOc
+
 ## Requirements
 
 Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
