@@ -14,6 +14,10 @@ A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea.
 
 https://youtu.be/-D2Mv_recOc
 
+![Screenshot 1](https://github.com/sanderd/tradesea-spacebar/raw/master/Screenshot%202026-05-07%20150743.png)
+
+![Screenshot 2](https://github.com/sanderd/tradesea-spacebar/raw/master/Screenshot%202026-05-07%20150752.png)
+
 ## Requirements
 
 Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
