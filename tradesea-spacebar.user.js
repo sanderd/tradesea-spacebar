@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         TradeSea Spacebar Trading
-// @version      2.0.0
+// @version      2.1.0
 // @description  Hold spacebar to enter quick-order mode. Left-click = Buy, Right-click = Sell. Price & type auto-resolve from mouse position.
 // @match        https://app.tradesea.ai/trade*
 // @grant        none
@@ -65,13 +65,14 @@
   let userConfig = null;      // Loaded from localStorage
   let settingsOverlay = null; // Settings modal element
   let settingsBtn = null;     // Sidebar gear button
+  let pendingOrder = null;    // { side, price } — set on mousedown, fired on mouseup if spaceHeld
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
-  const CONFIG_VERSION = 3;
+  const CONFIG_VERSION = 4;
 
   const DEFAULT_CONFIG = {
-    version: 3,
+    version: 4,
     hotkeyWithoutSpacebar: true,
     breakevenHotkey: null,
     contractSlots: [
@@ -81,6 +82,10 @@
       { qty: 4, hotkey: null },
       { qty: 5, hotkey: null },
     ],
+    priceLevels: [],
+    // Each entry: { id, label, instruments, levels, color }
+    // instruments: 'NQ,MNQ'  levels: [21000.50, 21100]
+    // color: 'rgba(255,0,255,0.8)'
   };
 
   // Each entry: { fromVersion, toVersion, migrate(cfg) → cfg }
@@ -93,6 +98,11 @@
     { fromVersion: 2, toVersion: 3, migrate: (cfg) => {
       cfg.version = 3;
       cfg.breakevenHotkey = null;
+      return cfg;
+    }},
+    { fromVersion: 3, toVersion: 4, migrate: (cfg) => {
+      cfg.version = 4;
+      cfg.priceLevels = cfg.priceLevels || [];
       return cfg;
     }},
   ];
@@ -245,6 +255,37 @@
     const decIdx = str.indexOf('.');
     const decimals = decIdx === -1 ? 0 : str.length - decIdx - 1;
     return price.toFixed(decimals);
+  }
+
+  /** Parse freeform text into an array of numbers. Accepts comma/semicolon/space separated, dot decimal. */
+  function parsePriceLevels(text) {
+    if (!text || typeof text !== 'string') return [];
+    // Split on comma, semicolon, whitespace
+    const tokens = text.split(/[,;\s]+/);
+    const levels = [];
+    for (const t of tokens) {
+      // Strip non-numeric chars except dot and minus
+      const cleaned = t.replace(/[^0-9.\-]/g, '');
+      if (!cleaned) continue;
+      const n = parseFloat(cleaned);
+      if (isFinite(n) && n > 0) levels.push(n);
+    }
+    return levels;
+  }
+
+  /** Get all price level groups matching the active chart symbol. */
+  function getMatchingPriceLevels() {
+    if (!userConfig?.priceLevels?.length) return [];
+    const sym = getActiveSymbol();
+    if (!sym) return [];
+    // Normalize: strip exchange prefix (e.g. "CME-Delayed:MNQ" → "MNQ")
+    const normSym = sym.replace(/.*:/, '').toUpperCase();
+
+    return userConfig.priceLevels.filter(group => {
+      if (!group.instruments || !group.levels?.length) return false;
+      const instruments = group.instruments.split(/[,;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+      return instruments.some(inst => normSym.includes(inst) || inst.includes(normSym));
+    });
   }
 
   function getCurrentPrice() {
@@ -488,6 +529,56 @@
       transition: all .15s; line-height: 1;
     }
     .ts-sb-close:hover { color: #ff5555; background: rgba(255,80,80,0.1); }
+    .ts-sb-pl-group {
+      background: rgba(30,30,42,0.8); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+      position: relative;
+    }
+    .ts-sb-pl-group .ts-sb-pl-remove {
+      position: absolute; top: 8px; right: 8px;
+      width: 22px; height: 22px; border-radius: 6px; border: none;
+      background: transparent; color: #555; cursor: pointer;
+      font-size: 12px; display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .ts-sb-pl-group .ts-sb-pl-remove:hover { background: rgba(255,80,80,0.15); color: #ff5555; }
+    .ts-sb-pl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .ts-sb-pl-row:last-child { margin-bottom: 0; }
+    .ts-sb-pl-label-text { font-size: 11px; color: #666; width: 70px; flex-shrink: 0; }
+    .ts-sb-pl-input {
+      flex: 1; padding: 5px 8px; border-radius: 6px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #e0e0ec; font-size: 12px; font-family: inherit; outline: none;
+      transition: border-color .15s;
+    }
+    .ts-sb-pl-input:focus { border-color: rgba(255,0,255,0.4); }
+    .ts-sb-pl-input::placeholder { color: #444; }
+    .ts-sb-pl-color-wrap {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ts-sb-pl-swatch {
+      width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer; flex-shrink: 0;
+    }
+    .ts-sb-pl-color-input {
+      width: 90px; padding: 5px 8px; border-radius: 6px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #e0e0ec; font-size: 11px; font-family: monospace; outline: none;
+    }
+    .ts-sb-pl-alpha {
+      width: 50px; padding: 5px 6px; border-radius: 6px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #e0e0ec; font-size: 11px; font-family: monospace; outline: none;
+      text-align: center;
+    }
+    .ts-sb-pl-add {
+      width: 100%; padding: 8px; border-radius: 8px; border: 1px dashed rgba(255,0,255,0.2);
+      background: transparent; color: #666; cursor: pointer;
+      font-size: 12px; font-family: inherit; transition: all .15s;
+      margin-top: 4px;
+    }
+    .ts-sb-pl-add:hover { border-color: rgba(255,0,255,0.4); color: #ff00ff; background: rgba(255,0,255,0.04); }
+    #ts-sb-panel { max-height: 85vh; overflow-y: auto; }
   `;
 
   function createSettingsUI() {
@@ -523,6 +614,48 @@
     settingsBtn = null;
     const style = document.getElementById('ts-sb-style');
     if (style) style.remove();
+  }
+
+  function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  function rgbaToHexAlpha(rgba) {
+    const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (!m) return { hex: '#ff00ff', alpha: 0.8 };
+    const hex = '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
+    return { hex, alpha: parseFloat(m[4] ?? '1') };
+  }
+
+  function buildPriceLevelGroupHTML(group, idx) {
+    const { hex, alpha } = rgbaToHexAlpha(group.color || 'rgba(255,0,255,0.8)');
+    const levelsStr = (group.levels || []).join(', ');
+    return `
+      <div class="ts-sb-pl-group" data-plidx="${idx}">
+        <button class="ts-sb-pl-remove" data-plidx="${idx}" title="Remove group">\u2715</button>
+        <div class="ts-sb-pl-row">
+          <span class="ts-sb-pl-label-text">Instruments</span>
+          <input class="ts-sb-pl-input" data-plfield="instruments" value="${group.instruments || ''}" placeholder="NQ, MNQ">
+        </div>
+        <div class="ts-sb-pl-row">
+          <span class="ts-sb-pl-label-text">Label</span>
+          <input class="ts-sb-pl-input" data-plfield="label" value="${group.label || ''}" placeholder="e.g. Key Level">
+        </div>
+        <div class="ts-sb-pl-row">
+          <span class="ts-sb-pl-label-text">Levels</span>
+          <input class="ts-sb-pl-input" data-plfield="levels" value="${levelsStr}" placeholder="21000.50, 21100, 21200">
+        </div>
+        <div class="ts-sb-pl-row">
+          <span class="ts-sb-pl-label-text">Color</span>
+          <div class="ts-sb-pl-color-wrap">
+            <input type="color" class="ts-sb-pl-swatch" data-plfield="hex" value="${hex}">
+            <input class="ts-sb-pl-color-input" data-plfield="hextext" value="${hex}">
+            <span style="font-size:10px;color:#555">\u03B1</span>
+            <input class="ts-sb-pl-alpha" data-plfield="alpha" value="${alpha}" placeholder="0.8">
+          </div>
+        </div>
+      </div>`;
   }
 
   function openSettings() {
@@ -570,6 +703,10 @@
             Lot-size hotkeys work without holding spacebar
           </label>
         </div>
+        <div class="ts-sb-section-label" style="margin-top:18px">Price Levels</div>
+        <div class="ts-sb-subtitle">Draw horizontal lines on the chart for matching instruments</div>
+        <div id="ts-sb-pl-container">${(cfg.priceLevels || []).map((g, i) => buildPriceLevelGroupHTML(g, i)).join('')}</div>
+        <button class="ts-sb-pl-add" id="ts-sb-pl-add">+ Add Price Level Group</button>
         <div class="ts-sb-actions">
           <button class="ts-sb-btn-cancel" id="ts-sb-cancel">Cancel</button>
           <button class="ts-sb-btn-save" id="ts-sb-save">Save</button>
@@ -595,6 +732,19 @@
       settingsOverlay.querySelectorAll('.ts-sb-hk:not(#ts-sb-be-hk)').forEach(inp => {
         const i = parseInt(inp.dataset.slot);
         newCfg.contractSlots[i].hotkey = inp.dataset.code || null;
+      });
+      // Collect price level groups
+      newCfg.priceLevels = [];
+      settingsOverlay.querySelectorAll('.ts-sb-pl-group').forEach(grp => {
+        const instruments = grp.querySelector('[data-plfield="instruments"]')?.value?.trim() || '';
+        const label = grp.querySelector('[data-plfield="label"]')?.value?.trim() || '';
+        const levelsRaw = grp.querySelector('[data-plfield="levels"]')?.value || '';
+        const hex = grp.querySelector('[data-plfield="hex"]')?.value || '#ff00ff';
+        const alpha = parseFloat(grp.querySelector('[data-plfield="alpha"]')?.value) || 0.8;
+        const levels = parsePriceLevels(levelsRaw);
+        if (instruments && levels.length > 0) {
+          newCfg.priceLevels.push({ id: Date.now() + Math.random(), instruments, label, levels, color: hexToRgba(hex, alpha) });
+        }
       });
       saveConfig(newCfg);
       userConfig = newCfg;
@@ -628,6 +778,31 @@
     settingsOverlay.querySelector('#ts-sb-be-clear')?.addEventListener('click', () => {
       const inp = settingsOverlay.querySelector('#ts-sb-be-hk');
       if (inp) { inp.value = ''; inp.dataset.code = ''; }
+    });
+    // Price level: add group
+    settingsOverlay.querySelector('#ts-sb-pl-add')?.addEventListener('click', () => {
+      const container = settingsOverlay.querySelector('#ts-sb-pl-container');
+      const idx = container.querySelectorAll('.ts-sb-pl-group').length;
+      const div = document.createElement('div');
+      div.innerHTML = buildPriceLevelGroupHTML({ instruments: '', label: '', levels: [], color: 'rgba(255,0,255,0.8)' }, idx);
+      const grp = div.firstElementChild;
+      container.appendChild(grp);
+      wireUpPriceLevelGroup(grp);
+    });
+
+    // Wire up existing price level groups
+    settingsOverlay.querySelectorAll('.ts-sb-pl-group').forEach(grp => wireUpPriceLevelGroup(grp));
+  }
+
+  function wireUpPriceLevelGroup(grp) {
+    // Remove button
+    grp.querySelector('.ts-sb-pl-remove')?.addEventListener('click', () => grp.remove());
+    // Sync color picker ↔ hex text
+    const swatch = grp.querySelector('[data-plfield="hex"]');
+    const hexText = grp.querySelector('[data-plfield="hextext"]');
+    swatch?.addEventListener('input', () => { if (hexText) hexText.value = swatch.value; });
+    hexText?.addEventListener('change', () => {
+      if (/^#[0-9a-fA-F]{6}$/.test(hexText.value) && swatch) swatch.value = hexText.value;
     });
   }
 
@@ -685,18 +860,107 @@
     return results;
   }
 
+  /** Convert a price to pane-local Y for a given scale (reusable). */
+  function priceToYForScale(price, scale) {
+    const y1 = 50, y2 = 300;
+    let p1, p2;
+    try {
+      p1 = scale.coordinateToPrice(y1);
+      p2 = scale.coordinateToPrice(y2);
+    } catch (e) { return null; }
+    if (p1 == null || p2 == null || !isFinite(p1) || !isFinite(p2)) return null;
+    if (Math.abs(p2 - p1) < 1e-10) return null;
+    const y = y1 + (price - p1) * (y2 - y1) / (p2 - p1);
+    return isFinite(y) ? y : null;
+  }
+
+  /** Draw configured price levels on all matching chart panes. */
+  function drawPriceLevels(iframeRect) {
+    const groups = getMatchingPriceLevels();
+    if (groups.length === 0) return;
+
+    const sym = getActiveSymbol();
+    const panes = getAllPaneRectsForSymbol(sym);
+    if (panes.length === 0) return;
+
+    const levelFont = 'bold 10px Inter, system-ui, -apple-system, sans-serif';
+    const labelH = 18;
+    const halfH = labelH / 2;
+
+    for (const group of groups) {
+      const color = group.color || 'rgba(255,0,255,0.8)';
+      // Parse RGBA to get a dimmer version for the line
+      let lineColor = color;
+      let labelBg = color;
+
+      for (const { paneRect, scale } of panes) {
+        if (!scale) continue;
+        const clipTop = iframeRect.top + paneRect.top;
+        const clipBottom = clipTop + paneRect.height;
+        const clipLeft = iframeRect.left + paneRect.left;
+        const clipRight = clipLeft + paneRect.width;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(clipLeft, clipTop, clipRight - clipLeft, clipBottom - clipTop);
+        ctx.clip();
+
+        for (const price of group.levels) {
+          const paneY = priceToYForScale(price, scale);
+          if (paneY == null) continue;
+          const drawY = iframeRect.top + paneRect.top + paneY;
+          if (drawY < clipTop || drawY > clipBottom) continue;
+
+          // ── Horizontal dashed line ──
+          ctx.beginPath();
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.moveTo(clipLeft, drawY);
+          ctx.lineTo(clipRight, drawY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // ── Right-aligned label tag ──
+          ctx.font = levelFont;
+          const priceText = String(price);
+          const labelText = group.label ? `${group.label}  ${priceText}` : priceText;
+          const textW = ctx.measureText(labelText).width + 12;
+          const tagX = clipRight - textW - 4;
+
+          ctx.fillStyle = labelBg;
+          ctx.globalAlpha = 0.85;
+          ctx.fillRect(tagX, drawY - halfH, textW, labelH);
+          ctx.globalAlpha = 1;
+
+          // Text color: auto black/white based on bg luminance
+          ctx.fillStyle = '#ffffff';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelText, tagX + 6, drawY);
+        }
+        ctx.restore();
+      }
+    }
+  }
+
   function draw() {
     rafId = requestAnimationFrame(draw);
-
-    if (!ctx || !spaceHeld || mousePrice == null) {
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
+    if (!ctx) return;
 
     const iframeRect = getIframeRect();
-    if (!iframeRect) return;
+    const hasPriceLevels = userConfig?.priceLevels?.length > 0;
 
+    // Clear canvas every frame
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    // Always draw price levels (even without spacebar)
+    if (iframeRect && hasPriceLevels) {
+      drawPriceLevels(iframeRect);
+    }
+
+    // Spacebar crosshair — only when active
+    if (!spaceHeld || mousePrice == null) return;
+    if (!iframeRect) return;
 
     const tickSize = getTickSize();
     if (!tickSize) return;
@@ -725,17 +989,8 @@
     for (const { paneRect, scale } of panes) {
       if (!scale) continue;
 
-      // Convert mousePrice to pane-local Y via linear interpolation
-      let paneY;
-      try {
-        const y1 = 50, y2 = 300;
-        const p1 = scale.coordinateToPrice(y1);
-        const p2 = scale.coordinateToPrice(y2);
-        if (p1 == null || p2 == null || !isFinite(p1) || !isFinite(p2)) continue;
-        if (Math.abs(p2 - p1) < 1e-10) continue;
-        paneY = y1 + (mousePrice - p1) * (y2 - y1) / (p2 - p1);
-        if (!isFinite(paneY)) continue;
-      } catch (e) { continue; }
+      const paneY = priceToYForScale(mousePrice, scale);
+      if (paneY == null) continue;
 
       // Map to main-doc coordinates
       const drawY = iframeRect.top + paneRect.top + paneY;
@@ -798,15 +1053,9 @@
 
       // ── Current price marker (yellow dashed) ────────────────
       if (ltp != null) {
-        let ltpPaneY;
-        try {
-          const y1 = 50, y2 = 300;
-          const p1 = scale.coordinateToPrice(y1);
-          const p2 = scale.coordinateToPrice(y2);
-          ltpPaneY = y1 + (ltp - p1) * (y2 - y1) / (p2 - p1);
-        } catch (e) { ltpPaneY = null; }
+        const ltpPaneY = priceToYForScale(ltp, scale);
 
-        if (ltpPaneY != null && isFinite(ltpPaneY)) {
+        if (ltpPaneY != null) {
           const ltpDrawY = iframeRect.top + paneRect.top + ltpPaneY;
           if (ltpDrawY >= clipTop && ltpDrawY <= clipBottom) {
             ctx.beginPath();
@@ -951,6 +1200,7 @@
       spaceHeld = false;
       mousePrice = null;
       mouseY = null;
+      pendingOrder = null;  // Cancel any pending order
       log('Quick-order mode OFF');
     }
   }
@@ -975,11 +1225,27 @@
     e.stopPropagation();
     e.stopImmediatePropagation();
 
+    // Capture intent — order fires on mouseup if spacebar still held
     if (e.button === 0) {
-      placeOrderAtPrice('buy', mousePrice);
+      pendingOrder = { side: 'buy', price: mousePrice };
     } else if (e.button === 2) {
-      placeOrderAtPrice('sell', mousePrice);
+      pendingOrder = { side: 'sell', price: mousePrice };
     }
+  }
+
+  function onIframeMouseUp(e) {
+    if (!pendingOrder) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    if (spaceHeld) {
+      placeOrderAtPrice(pendingOrder.side, pendingOrder.price);
+    } else {
+      log('Order cancelled — spacebar released before mouse');
+    }
+    pendingOrder = null;
   }
 
   function onContextMenu(e) {
@@ -1034,6 +1300,7 @@
       iframeWin.addEventListener('keyup', onKeyUp, true);
       iframeWin.addEventListener('mousemove', onIframeMouseMove, true);
       iframeWin.addEventListener('mousedown', onIframeMouseDown, true);
+      iframeWin.addEventListener('mouseup', onIframeMouseUp, true);
       iframeWin.addEventListener('contextmenu', onContextMenu, true);
 
       cleanupFns.push(() => {
@@ -1041,6 +1308,7 @@
         iframeWin.removeEventListener('keyup', onKeyUp, true);
         iframeWin.removeEventListener('mousemove', onIframeMouseMove, true);
         iframeWin.removeEventListener('mousedown', onIframeMouseDown, true);
+        iframeWin.removeEventListener('mouseup', onIframeMouseUp, true);
         iframeWin.removeEventListener('contextmenu', onContextMenu, true);
       });
     }
@@ -1120,7 +1388,8 @@
     // 4. Attach event listeners
     attachEventListeners();
 
-    // 5. Start draw loop
+    // 5. Create canvas overlay + start draw loop (always on, for price levels)
+    ensureCanvas();
     rafId = requestAnimationFrame(draw);
 
     // 6. Expose API
