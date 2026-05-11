@@ -874,14 +874,33 @@
     return isFinite(y) ? y : null;
   }
 
+  /** Check if TradingView has any open menus/dialogs/dropdowns inside the iframe. */
+  function isTvMenuOpen() {
+    if (!iframeDoc) return false;
+    // TradingView uses these selectors for context menus, dropdowns, and dialogs
+    const selectors = [
+      '.menu-', '[class*="menuWrap"]', '[class*="contextMenu"]',
+      '[data-name="menu"]', '.dialog-', '[class*="dialog"]',
+      '[class*="popup"]', '[class*="dropdown"]',
+      '[class*="Modal"]', '[role="dialog"]', '[role="menu"]',
+      '[role="listbox"]',
+    ];
+    for (const sel of selectors) {
+      try { if (iframeDoc.querySelector(sel)) return true; } catch (_) {}
+    }
+    return false;
+  }
+
   /** Draw configured price levels on all matching chart panes. */
-  function drawPriceLevels(iframeRect) {
+  function drawPriceLevels(iframeRect, labelsOnly) {
     const groups = getMatchingPriceLevels();
     if (groups.length === 0) return;
 
     const sym = getActiveSymbol();
     const panes = getAllPaneRectsForSymbol(sym);
     if (panes.length === 0) return;
+
+    const LABEL_STRIP_WIDTH = 120;  // width of the right-side label strip when menus are open
 
     const levelFont = 'bold 10px Inter, system-ui, -apple-system, sans-serif';
     const labelH = 18;
@@ -897,8 +916,9 @@
         if (!scale) continue;
         const clipTop = iframeRect.top + paneRect.top;
         const clipBottom = clipTop + paneRect.height;
-        const clipLeft = iframeRect.left + paneRect.left;
-        const clipRight = clipLeft + paneRect.width;
+        const fullLeft = iframeRect.left + paneRect.left;
+        const clipRight = fullLeft + paneRect.width;
+        const clipLeft = labelsOnly ? Math.max(fullLeft, clipRight - LABEL_STRIP_WIDTH) : fullLeft;
 
         ctx.save();
         ctx.beginPath();
@@ -955,7 +975,8 @@
 
     // Always draw price levels (even without spacebar)
     if (iframeRect && hasPriceLevels) {
-      drawPriceLevels(iframeRect);
+      const menuOpen = isTvMenuOpen();
+      drawPriceLevels(iframeRect, menuOpen);
     }
 
     // Spacebar crosshair — only when active
