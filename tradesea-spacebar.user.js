@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         TradeSea Spacebar Trading
-// @version      2.1.0
+// @version      2.2.0
 // @description  Hold spacebar to enter quick-order mode. Left-click = Buy, Right-click = Sell. Price & type auto-resolve from mouse position.
 // @match        https://app.tradesea.ai/trade*
 // @grant        none
@@ -90,21 +90,27 @@
 
   // Each entry: { fromVersion, toVersion, migrate(cfg) → cfg }
   const MIGRATIONS = [
-    { fromVersion: 1, toVersion: 2, migrate: (cfg) => {
-      cfg.version = 2;
-      cfg.hotkeyWithoutSpacebar = true;
-      return cfg;
-    }},
-    { fromVersion: 2, toVersion: 3, migrate: (cfg) => {
-      cfg.version = 3;
-      cfg.breakevenHotkey = null;
-      return cfg;
-    }},
-    { fromVersion: 3, toVersion: 4, migrate: (cfg) => {
-      cfg.version = 4;
-      cfg.priceLevels = cfg.priceLevels || [];
-      return cfg;
-    }},
+    {
+      fromVersion: 1, toVersion: 2, migrate: (cfg) => {
+        cfg.version = 2;
+        cfg.hotkeyWithoutSpacebar = true;
+        return cfg;
+      }
+    },
+    {
+      fromVersion: 2, toVersion: 3, migrate: (cfg) => {
+        cfg.version = 3;
+        cfg.breakevenHotkey = null;
+        return cfg;
+      }
+    },
+    {
+      fromVersion: 3, toVersion: 4, migrate: (cfg) => {
+        cfg.version = 4;
+        cfg.priceLevels = cfg.priceLevels || [];
+        return cfg;
+      }
+    },
   ];
 
   function applyMigrations(cfg) {
@@ -617,14 +623,14 @@
   }
 
   function hexToRgba(hex, alpha) {
-    const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
   function rgbaToHexAlpha(rgba) {
     const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
     if (!m) return { hex: '#ff00ff', alpha: 0.8 };
-    const hex = '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
+    const hex = '#' + [m[1], m[2], m[3]].map(x => parseInt(x).toString(16).padStart(2, '0')).join('');
     return { hex, alpha: parseFloat(m[4] ?? '1') };
   }
 
@@ -874,33 +880,14 @@
     return isFinite(y) ? y : null;
   }
 
-  /** Check if TradingView has any open menus/dialogs/dropdowns inside the iframe. */
-  function isTvMenuOpen() {
-    if (!iframeDoc) return false;
-    // TradingView uses these selectors for context menus, dropdowns, and dialogs
-    const selectors = [
-      '.menu-', '[class*="menuWrap"]', '[class*="contextMenu"]',
-      '[data-name="menu"]', '.dialog-', '[class*="dialog"]',
-      '[class*="popup"]', '[class*="dropdown"]',
-      '[class*="Modal"]', '[role="dialog"]', '[role="menu"]',
-      '[role="listbox"]',
-    ];
-    for (const sel of selectors) {
-      try { if (iframeDoc.querySelector(sel)) return true; } catch (_) {}
-    }
-    return false;
-  }
-
   /** Draw configured price levels on all matching chart panes. */
-  function drawPriceLevels(iframeRect, labelsOnly) {
+  function drawPriceLevels(iframeRect) {
     const groups = getMatchingPriceLevels();
     if (groups.length === 0) return;
 
     const sym = getActiveSymbol();
     const panes = getAllPaneRectsForSymbol(sym);
     if (panes.length === 0) return;
-
-    const LABEL_STRIP_WIDTH = 120;  // width of the right-side label strip when menus are open
 
     const levelFont = 'bold 10px Inter, system-ui, -apple-system, sans-serif';
     const labelH = 18;
@@ -916,9 +903,8 @@
         if (!scale) continue;
         const clipTop = iframeRect.top + paneRect.top;
         const clipBottom = clipTop + paneRect.height;
-        const fullLeft = iframeRect.left + paneRect.left;
-        const clipRight = fullLeft + paneRect.width;
-        const clipLeft = labelsOnly ? Math.max(fullLeft, clipRight - LABEL_STRIP_WIDTH) : fullLeft;
+        const clipLeft = iframeRect.left + paneRect.left;
+        const clipRight = clipLeft + paneRect.width;
 
         ctx.save();
         ctx.beginPath();
@@ -975,8 +961,7 @@
 
     // Always draw price levels (even without spacebar)
     if (iframeRect && hasPriceLevels) {
-      const menuOpen = isTvMenuOpen();
-      drawPriceLevels(iframeRect, menuOpen);
+      drawPriceLevels(iframeRect);
     }
 
     // Spacebar crosshair — only when active
