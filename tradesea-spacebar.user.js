@@ -880,6 +880,40 @@
     return isFinite(y) ? y : null;
   }
 
+  /**
+   * Collect bounding rects (in main-document coords) of any open
+   * TradingView menus, dialogs, or popups inside the iframe.
+   * Returns an empty array when nothing is open (common case).
+   */
+  function getTvOverlayRects(iframeRect) {
+    if (!iframeDoc) return [];
+    const rects = [];
+    // These selectors only match transient elements (verified via DOM inspection)
+    const selectors = [
+      '[class*="menuWrap"]', '[class*="contextMenu"]',
+      '[data-name="menu"]', '[class*="dialog"]',
+      '[class*="popup"]',
+      '[class*="Modal"]', '[role="dialog"]', '[role="menu"]',
+      '[role="listbox"]',
+    ];
+    for (const sel of selectors) {
+      try {
+        const els = iframeDoc.querySelectorAll(sel);
+        for (const el of els) {
+          const r = el.getBoundingClientRect();
+          if (r.width < 2 || r.height < 2) continue; // skip invisible
+          rects.push({
+            x: iframeRect.left + r.left,
+            y: iframeRect.top + r.top,
+            w: r.width,
+            h: r.height,
+          });
+        }
+      } catch (_) {}
+    }
+    return rects;
+  }
+
   /** Draw configured price levels on all matching chart panes. */
   function drawPriceLevels(iframeRect) {
     const groups = getMatchingPriceLevels();
@@ -961,7 +995,24 @@
 
     // Always draw price levels (even without spacebar)
     if (iframeRect && hasPriceLevels) {
-      drawPriceLevels(iframeRect);
+      // Mask out any open TradingView menus/dialogs so lines don't cover them
+      const overlayRects = getTvOverlayRects(iframeRect);
+      if (overlayRects.length > 0) {
+        ctx.save();
+        ctx.beginPath();
+        // Full canvas as the outer rect
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        // Punch holes for each menu/dialog (evenodd subtracts inner rects)
+        const pad = 4; // slight padding around menus
+        for (const r of overlayRects) {
+          ctx.rect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+        }
+        ctx.clip('evenodd');
+        drawPriceLevels(iframeRect);
+        ctx.restore();
+      } else {
+        drawPriceLevels(iframeRect);
+      }
     }
 
     // Spacebar crosshair — only when active
