@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         TradeSea Spacebar Trading
-// @version      2.3.0
+// @version      2.4.0
 // @description  Hold spacebar to enter quick-order mode. Left-click = Buy, Right-click = Sell. Price & type auto-resolve from mouse position.
 // @match        https://app.tradesea.ai/trade*
 // @grant        none
@@ -73,10 +73,10 @@
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
-  const CONFIG_VERSION = 6;
+  const CONFIG_VERSION = 7;
 
   const DEFAULT_CONFIG = {
-    version: 6,
+    version: 7,
     hotkeyWithoutSpacebar: true,
     breakevenHotkey: null,
     contractSlots: [
@@ -91,6 +91,22 @@
     // instruments: 'NQ,MNQ'  levels: [21000.50, 21100]
     // color: 'rgba(255,0,255,0.8)'  lineStyle: 'dashed'  lineWidth: 1
     // showLabels: true  showPrice: true  fontSize: 10
+    crosshair: {
+      showBuySell: true,
+      showPrice: true,
+      showLotSize: true,
+      lineColor: '#ff00ff',
+      lineStyle: 'dashed',
+      lineWidth: 1.5,
+      fontSizeBuySell: 11,
+      fontSizeLotSize: 11,
+      buyBg: '#00d4aa',
+      buyFg: '#000000',
+      sellBg: '#ff6b9d',
+      sellFg: '#000000',
+      lotBg: 'rgba(60,60,70,1)',
+      lotFg: '#ffffff',
+    },
   };
 
   // Each entry: { fromVersion, toVersion, migrate(cfg) → cfg }
@@ -133,6 +149,15 @@
           if (g.showLabels === undefined) g.showLabels = true;
           if (g.showPrice === undefined) g.showPrice = true;
           if (!g.fontSize) g.fontSize = 10;
+        }
+        return cfg;
+      }
+    },
+    {
+      fromVersion: 6, toVersion: 7, migrate: (cfg) => {
+        cfg.version = 7;
+        if (!cfg.crosshair) {
+          cfg.crosshair = structuredClone(DEFAULT_CONFIG.crosshair);
         }
         return cfg;
       }
@@ -827,6 +852,79 @@
       <div id="ts-sb-pl-container">${(cfg.priceLevels || []).map((g, i) => buildPriceLevelGroupHTML(g, i)).join('')}</div>
       <button class="ts-sb-pl-add" id="ts-sb-pl-add">+ Add Price Level Group</button>`;
 
+    // ── Settings tab content (crosshair customization) ──
+    const ch = cfg.crosshair || DEFAULT_CONFIG.crosshair;
+    const chLineHex = ch.lineColor || '#ff00ff';
+    const chLs = ch.lineStyle || 'dashed';
+    const settingsTab = `
+      <div class="ts-sb-section-label">Crosshair Visibility</div>
+      <div class="ts-sb-pl-row" style="gap:16px;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#aaa">
+          <input type="checkbox" id="ts-sb-ch-buysell" ${ch.showBuySell !== false ? 'checked' : ''}
+                 style="accent-color:#ff00ff;width:14px;height:14px;cursor:pointer">
+          Show Buy / Sell
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#aaa">
+          <input type="checkbox" id="ts-sb-ch-price" ${ch.showPrice !== false ? 'checked' : ''}
+                 style="accent-color:#ff00ff;width:14px;height:14px;cursor:pointer">
+          Show Price
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#aaa">
+          <input type="checkbox" id="ts-sb-ch-lotsize" ${ch.showLotSize !== false ? 'checked' : ''}
+                 style="accent-color:#ff00ff;width:14px;height:14px;cursor:pointer">
+          Show Lot Size
+        </label>
+      </div>
+
+      <div class="ts-sb-section-label" style="margin-top:14px">Crosshair Line</div>
+      <div class="ts-sb-pl-row" style="margin-top:8px">
+        <span class="ts-sb-pl-label-text">Color</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-linecolor" value="${chLineHex}">
+        <span class="ts-sb-pl-label-text" style="width:auto;margin-left:8px">Style</span>
+        <select class="ts-sb-pl-select" id="ts-sb-ch-linestyle">
+          <option value="solid"${chLs === 'solid' ? ' selected' : ''}>Solid</option>
+          <option value="dashed"${chLs === 'dashed' ? ' selected' : ''}>Dashed</option>
+          <option value="dotted"${chLs === 'dotted' ? ' selected' : ''}>Dotted</option>
+          <option value="dash-dot"${chLs === 'dash-dot' ? ' selected' : ''}>Dash-Dot</option>
+        </select>
+        <span class="ts-sb-pl-label-text" style="width:auto;margin-left:8px">Width</span>
+        <input type="number" class="ts-sb-pl-width" id="ts-sb-ch-linewidth" value="${ch.lineWidth || 1.5}" min="0.5" max="10" step="0.5">
+        <span style="font-size:10px;color:#555">px</span>
+      </div>
+
+      <div class="ts-sb-section-label" style="margin-top:14px">Font Sizes</div>
+      <div class="ts-sb-pl-row" style="margin-top:8px">
+        <span class="ts-sb-pl-label-text">Buy / Sell</span>
+        <input type="number" class="ts-sb-pl-width" id="ts-sb-ch-fs-buysell" value="${ch.fontSizeBuySell || 11}" min="6" max="24">
+        <span style="font-size:10px;color:#555">px</span>
+        <span class="ts-sb-pl-label-text" style="width:auto;margin-left:12px">Lot Size</span>
+        <input type="number" class="ts-sb-pl-width" id="ts-sb-ch-fs-lotsize" value="${ch.fontSizeLotSize || 11}" min="6" max="24">
+        <span style="font-size:10px;color:#555">px</span>
+      </div>
+
+      <div class="ts-sb-section-label" style="margin-top:14px">Label Colors</div>
+      <div class="ts-sb-pl-row" style="margin-top:8px">
+        <span class="ts-sb-pl-label-text">Buy</span>
+        <span style="font-size:10px;color:#555">bg</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-buybg" value="${ch.buyBg || '#00d4aa'}">
+        <span style="font-size:10px;color:#555">fg</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-buyfg" value="${ch.buyFg || '#000000'}">
+      </div>
+      <div class="ts-sb-pl-row">
+        <span class="ts-sb-pl-label-text">Sell</span>
+        <span style="font-size:10px;color:#555">bg</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-sellbg" value="${ch.sellBg || '#ff6b9d'}">
+        <span style="font-size:10px;color:#555">fg</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-sellfg" value="${ch.sellFg || '#000000'}">
+      </div>
+      <div class="ts-sb-pl-row">
+        <span class="ts-sb-pl-label-text">Lot Size</span>
+        <span style="font-size:10px;color:#555">bg</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-lotbg" value="${rgbaToHexAlpha(ch.lotBg || 'rgba(60,60,70,1)').hex}">
+        <span style="font-size:10px;color:#555">fg</span>
+        <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-lotfg" value="${ch.lotFg || '#ffffff'}">
+      </div>`;
+
     settingsOverlay.innerHTML = `
       <div id="ts-sb-panel">
         <div class="ts-sb-titlebar">
@@ -842,9 +940,11 @@
         </div>
         <div class="ts-sb-tabs">
           <button class="ts-sb-tab active" data-tab="hotkeys">Hotkeys</button>
+          <button class="ts-sb-tab" data-tab="settings">Settings</button>
           <button class="ts-sb-tab" data-tab="pricelevels">Price Levels</button>
         </div>
         <div class="ts-sb-tab-content active" data-tab-content="hotkeys">${hotkeyTab}</div>
+        <div class="ts-sb-tab-content" data-tab-content="settings">${settingsTab}</div>
         <div class="ts-sb-tab-content" data-tab-content="pricelevels">${priceLevelsTab}</div>
         <div class="ts-sb-actions">
           <button class="ts-sb-btn-cancel" id="ts-sb-cancel">Cancel</button>
@@ -943,6 +1043,24 @@
           newCfg.priceLevels.push({ id: Date.now() + Math.random(), instruments, label, levels, color: hexToRgba(hex, alpha), lineStyle, lineWidth, showLabels, showPrice, fontSize });
         }
       });
+      // Collect crosshair settings
+      const q = (id) => settingsOverlay.querySelector(id);
+      newCfg.crosshair = {
+        showBuySell: q('#ts-sb-ch-buysell')?.checked !== false,
+        showPrice: q('#ts-sb-ch-price')?.checked !== false,
+        showLotSize: q('#ts-sb-ch-lotsize')?.checked !== false,
+        lineColor: q('#ts-sb-ch-linecolor')?.value || '#ff00ff',
+        lineStyle: q('#ts-sb-ch-linestyle')?.value || 'dashed',
+        lineWidth: parseFloat(q('#ts-sb-ch-linewidth')?.value) || 1.5,
+        fontSizeBuySell: Math.max(6, Math.min(24, parseInt(q('#ts-sb-ch-fs-buysell')?.value) || 11)),
+        fontSizeLotSize: Math.max(6, Math.min(24, parseInt(q('#ts-sb-ch-fs-lotsize')?.value) || 11)),
+        buyBg: q('#ts-sb-ch-buybg')?.value || '#00d4aa',
+        buyFg: q('#ts-sb-ch-buyfg')?.value || '#000000',
+        sellBg: q('#ts-sb-ch-sellbg')?.value || '#ff6b9d',
+        sellFg: q('#ts-sb-ch-sellfg')?.value || '#000000',
+        lotBg: q('#ts-sb-ch-lotbg')?.value || '#3c3c46',
+        lotFg: q('#ts-sb-ch-lotfg')?.value || '#ffffff',
+      };
       saveConfig(newCfg);
       userConfig = newCfg;
       closeSettings();
@@ -1303,49 +1421,62 @@
       ctx.rect(clipLeft, clipTop, clipRight - clipLeft, clipBottom - clipTop);
       ctx.clip();
 
-      // ── Magenta horizontal line ─────────────────────────────
+      // ── Crosshair horizontal line ────────────────────────────
+      const chCfg = userConfig?.crosshair || DEFAULT_CONFIG.crosshair;
+      const chDash = lineStyleToDash(chCfg.lineStyle, chCfg.lineWidth);
       ctx.beginPath();
-      ctx.strokeStyle = CONFIG.COLORS.line;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([6, 3]);
+      ctx.strokeStyle = chCfg.lineColor;
+      ctx.lineWidth = chCfg.lineWidth;
+      ctx.setLineDash(chDash);
       ctx.moveTo(clipLeft, drawY);
       ctx.lineTo(clipRight, drawY);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // ── Labels (centered on line, drawn on top) ────────────
-      ctx.font = CONFIG.LABEL_FONT;
-      const halfH = CONFIG.LABEL_HEIGHT / 2;
-
-      const buyText = `BUY ${buyType} ${priceStr}`;
-      const buyW = ctx.measureText(buyText).width + 16;
-      const labelX = clipLeft + 8;
-
-      ctx.fillStyle = CONFIG.COLORS.buyBg;
-      ctx.fillRect(labelX, drawY - halfH, buyW, CONFIG.LABEL_HEIGHT);
-      ctx.fillStyle = CONFIG.COLORS.labelText;
+      // ── Labels (positioned along the line) ──────────────────
+      const bsFontSize = chCfg.fontSizeBuySell || 11;
+      const lotFontSize = chCfg.fontSizeLotSize || 11;
+      const bsFont = `bold ${bsFontSize}px Inter, system-ui, -apple-system, sans-serif`;
+      const lotFont = `bold ${lotFontSize}px Inter, system-ui, -apple-system, sans-serif`;
+      const bsLabelH = bsFontSize + 9;
+      const lotLabelH = lotFontSize + 9;
       ctx.textBaseline = 'middle';
-      ctx.fillText(buyText, labelX + 8, drawY);
 
-      const sellText = `SELL ${sellType} ${priceStr}`;
-      const sellW = ctx.measureText(sellText).width + 16;
-      const sellX = labelX + buyW + 6;
+      let nextX = clipLeft + 8;
 
-      ctx.fillStyle = CONFIG.COLORS.sellBg;
-      ctx.fillRect(sellX, drawY - halfH, sellW, CONFIG.LABEL_HEIGHT);
-      ctx.fillStyle = CONFIG.COLORS.labelText;
-      ctx.fillText(sellText, sellX + 8, drawY);
+      if (chCfg.showBuySell !== false) {
+        ctx.font = bsFont;
+        const bsHalfH = bsLabelH / 2;
+        const buyText = chCfg.showPrice !== false ? `BUY ${buyType} ${priceStr}` : `BUY ${buyType}`;
+        const buyW = ctx.measureText(buyText).width + 16;
+        ctx.fillStyle = chCfg.buyBg;
+        ctx.fillRect(nextX, drawY - bsHalfH, buyW, bsLabelH);
+        ctx.fillStyle = chCfg.buyFg;
+        ctx.fillText(buyText, nextX + 8, drawY);
 
-      // ── Lot size indicator ──────────────────────────────────
-      const qtyText = `${qty} lot${qty !== 1 ? 's' : ''}`;
-      const qtyW = ctx.measureText(qtyText).width + 12;
-      const qtyX = sellX + sellW + 6;
-      ctx.fillStyle = 'rgba(60,60,70,1)';
-      ctx.fillRect(qtyX, drawY - halfH, qtyW, CONFIG.LABEL_HEIGHT);
-      ctx.fillStyle = '#ffffff';
-      ctx.globalAlpha = 0.7;
-      ctx.fillText(qtyText, qtyX + 6, drawY);
-      ctx.globalAlpha = 1;
+        const sellText = chCfg.showPrice !== false ? `SELL ${sellType} ${priceStr}` : `SELL ${sellType}`;
+        const sellW = ctx.measureText(sellText).width + 16;
+        const sellX = nextX + buyW + 6;
+        ctx.fillStyle = chCfg.sellBg;
+        ctx.fillRect(sellX, drawY - bsHalfH, sellW, bsLabelH);
+        ctx.fillStyle = chCfg.sellFg;
+        ctx.fillText(sellText, sellX + 8, drawY);
+
+        nextX = sellX + sellW + 6;
+      }
+
+      if (chCfg.showLotSize !== false) {
+        ctx.font = lotFont;
+        const lotHalfH = lotLabelH / 2;
+        const qtyText = `${qty} lot${qty !== 1 ? 's' : ''}`;
+        const qtyW = ctx.measureText(qtyText).width + 12;
+        ctx.fillStyle = chCfg.lotBg;
+        ctx.fillRect(nextX, drawY - lotHalfH, qtyW, lotLabelH);
+        ctx.fillStyle = chCfg.lotFg;
+        ctx.globalAlpha = 0.7;
+        ctx.fillText(qtyText, nextX + 6, drawY);
+        ctx.globalAlpha = 1;
+      }
 
       // ── Current price marker (yellow dashed) ────────────────
       if (ltp != null) {
