@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         TradeSea Spacebar Trading
-// @version      2.4.0
+// @version      2.5.0
 // @description  Hold spacebar to enter quick-order mode. Left-click = Buy, Right-click = Sell. Price & type auto-resolve from mouse position.
 // @match        https://app.tradesea.ai/trade*
 // @grant        none
