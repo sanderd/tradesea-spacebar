@@ -66,6 +66,8 @@
   let settingsOverlay = null; // Settings modal element
   let settingsBtn = null;     // Sidebar gear button
   let pendingOrder = null;    // { side, price } — set on mousedown, fired on mouseup if spaceHeld
+  let _overlayRectsCache = []; // Cached menu/dialog rects (refreshed every ~200ms)
+  let _overlayRectsTick = 0;   // Frame counter for throttling overlay rect scanning
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
@@ -995,16 +997,18 @@
 
     // Always draw price levels (even without spacebar)
     if (iframeRect && hasPriceLevels) {
+      // Refresh overlay rects every ~12 frames (~200ms at 60fps)
+      if (++_overlayRectsTick >= 12) {
+        _overlayRectsTick = 0;
+        _overlayRectsCache = getTvOverlayRects(iframeRect);
+      }
       // Mask out any open TradingView menus/dialogs so lines don't cover them
-      const overlayRects = getTvOverlayRects(iframeRect);
-      if (overlayRects.length > 0) {
+      if (_overlayRectsCache.length > 0) {
         ctx.save();
         ctx.beginPath();
-        // Full canvas as the outer rect
         ctx.rect(0, 0, canvas.width, canvas.height);
-        // Punch holes for each menu/dialog (evenodd subtracts inner rects)
-        const pad = 4; // slight padding around menus
-        for (const r of overlayRects) {
+        const pad = 4;
+        for (const r of _overlayRectsCache) {
           ctx.rect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
         }
         ctx.clip('evenodd');
