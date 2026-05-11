@@ -68,6 +68,8 @@
   let pendingOrder = null;    // { side, price } — set on mousedown, fired on mouseup if spaceHeld
   let _overlayRectsCache = []; // Cached menu/dialog rects (refreshed every ~200ms)
   let _overlayRectsTick = 0;   // Frame counter for throttling overlay rect scanning
+  let _paneRectsCache = null;  // { symbol, rects, ts } — cached pane rects (~500ms TTL)
+  const _PANE_CACHE_TTL = 500; // ms
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
@@ -436,6 +438,7 @@
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    _paneRectsCache = null; // Invalidate — pane positions changed
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -825,8 +828,20 @@
   //  5. DRAW LOOP
   // ═══════════════════════════════════════════════════════════════════
 
-  // ── Helper: collect all chart pane rects for a given symbol ─────
+  // ── Helper: collect all chart pane rects for a given symbol (cached) ─
   function getAllPaneRectsForSymbol(activeSymbol) {
+    const now = performance.now();
+    if (_paneRectsCache
+        && _paneRectsCache.symbol === activeSymbol
+        && (now - _paneRectsCache.ts) < _PANE_CACHE_TTL) {
+      return _paneRectsCache.rects;
+    }
+    const rects = _getAllPaneRectsForSymbolUncached(activeSymbol);
+    _paneRectsCache = { symbol: activeSymbol, rects, ts: now };
+    return rects;
+  }
+
+  function _getAllPaneRectsForSymbolUncached(activeSymbol) {
     const results = [];
     if (!iframeWin || !iframeDoc) return results;
 
