@@ -1002,7 +1002,7 @@
 
   function draw() {
     rafId = requestAnimationFrame(draw);
-    if (!ctx) return;
+    if (!ctx || document.hidden) return;
 
     const iframeRect = getIframeRect();
     const hasPriceLevels = userConfig?.priceLevels?.length > 0;
