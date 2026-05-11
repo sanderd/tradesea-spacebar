@@ -330,19 +330,20 @@
     return levels;
   }
 
-  /** Get all price level groups matching the active chart symbol. */
-  function getMatchingPriceLevels() {
-    if (!userConfig?.priceLevels?.length) return [];
-    const sym = getActiveSymbol();
-    if (!sym) return [];
-    // Normalize: strip exchange prefix (e.g. "CME-Delayed:MNQ" → "MNQ")
+  /** Get all price level groups matching a specific symbol. */
+  function getMatchingPriceLevelsForSymbol(sym) {
+    if (!userConfig?.priceLevels?.length || !sym) return [];
     const normSym = sym.replace(/.*:/, '').toUpperCase();
-
     return userConfig.priceLevels.filter(group => {
       if (!group.instruments || !group.levels?.length) return false;
       const instruments = group.instruments.split(/[,;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
       return instruments.some(inst => normSym.includes(inst) || inst.includes(normSym));
     });
+  }
+
+  /** Get all price level groups matching the active chart symbol (convenience). */
+  function getMatchingPriceLevels() {
+    return getMatchingPriceLevelsForSymbol(getActiveSymbol());
   }
 
   function getCurrentPrice() {
@@ -1201,6 +1202,58 @@
     return results;
   }
 
+  // ── Helper: collect ALL chart panes (every symbol) for price levels ─
+  let _allPanesCache = null;
+  const _ALL_PANES_CACHE_TTL = 500;
+
+  function getAllChartPanes() {
+    const now = performance.now();
+    if (_allPanesCache && (now - _allPanesCache.ts) < _ALL_PANES_CACHE_TTL) {
+      return _allPanesCache.panes;
+    }
+    const panes = _getAllChartPanesUncached();
+    _allPanesCache = { panes, ts: now };
+    return panes;
+  }
+
+  function _getAllChartPanesUncached() {
+    const results = [];
+    if (!iframeWin || !iframeDoc) return results;
+
+    const api = getTvApi();
+    if (!api) return results;
+
+    const count = api.chartsCount?.() || 1;
+    const containers = iframeDoc.querySelectorAll('.chart-container');
+
+    for (let i = 0; i < count; i++) {
+      try {
+        const chart = api.chart(i);
+        if (!chart) continue;
+        const sym = chart.symbol?.() || chart.symbolExt?.()?.ticker || '';
+        if (!sym) continue;
+
+        const container = containers[i];
+        if (!container) continue;
+        const wrapper = container.querySelector('.chart-gui-wrapper');
+        const canvasEl = wrapper?.querySelector('canvas') || container.querySelector('canvas');
+        if (!canvasEl) continue;
+
+        const chartPanes = chart.getPanes();
+        const scale = chartPanes?.[0]?.getMainSourcePriceScale?.()
+          || chartPanes?.[0]?.getRightPriceScale?.()
+          || chartPanes?.[0]?.getLeftPriceScale?.();
+
+        results.push({
+          symbol: sym,
+          paneRect: canvasEl.getBoundingClientRect(),
+          scale,
+        });
+      } catch (e) { /* skip broken chart */ }
+    }
+    return results;
+  }
+
   /** Convert a price to pane-local Y for a given scale (reusable). */
   function priceToYForScale(price, scale) {
     const y1 = 50, y2 = 300;
@@ -1261,39 +1314,40 @@
     }
   }
 
-  /** Draw configured price levels on all matching chart panes. */
+  /** Draw configured price levels on ALL chart panes (not just active). */
   function drawPriceLevels(iframeRect) {
-    const groups = getMatchingPriceLevels();
-    if (groups.length === 0) return;
+    if (!userConfig?.priceLevels?.length) return;
 
-    const sym = getActiveSymbol();
-    const panes = getAllPaneRectsForSymbol(sym);
-    if (panes.length === 0) return;
+    const allPanes = getAllChartPanes();
+    if (allPanes.length === 0) return;
 
-    for (const group of groups) {
-      const color = group.color || 'rgba(255,0,255,0.8)';
-      let lineColor = color;
-      let labelBg = color;
-      const groupLineWidth = group.lineWidth || 1;
-      const groupDash = lineStyleToDash(group.lineStyle, groupLineWidth);
-      const showLabels = group.showLabels !== false;
-      const showPrice = group.showPrice !== false;
-      const fontSize = group.fontSize || 10;
-      const levelFont = `bold ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
-      const labelH = fontSize + 8;
-      const halfH = labelH / 2;
+    for (const { symbol: paneSym, paneRect, scale } of allPanes) {
+      if (!scale) continue;
+      const groups = getMatchingPriceLevelsForSymbol(paneSym);
+      if (groups.length === 0) continue;
 
-      for (const { paneRect, scale } of panes) {
-        if (!scale) continue;
-        const clipTop = iframeRect.top + paneRect.top;
-        const clipBottom = clipTop + paneRect.height;
-        const clipLeft = iframeRect.left + paneRect.left;
-        const clipRight = clipLeft + paneRect.width;
+      const clipTop = iframeRect.top + paneRect.top;
+      const clipBottom = clipTop + paneRect.height;
+      const clipLeft = iframeRect.left + paneRect.left;
+      const clipRight = clipLeft + paneRect.width;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(clipLeft, clipTop, clipRight - clipLeft, clipBottom - clipTop);
-        ctx.clip();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(clipLeft, clipTop, clipRight - clipLeft, clipBottom - clipTop);
+      ctx.clip();
+
+      for (const group of groups) {
+        const color = group.color || 'rgba(255,0,255,0.8)';
+        let lineColor = color;
+        let labelBg = color;
+        const groupLineWidth = group.lineWidth || 1;
+        const groupDash = lineStyleToDash(group.lineStyle, groupLineWidth);
+        const showLabels = group.showLabels !== false;
+        const showPrice = group.showPrice !== false;
+        const fontSize = group.fontSize || 10;
+        const levelFont = `bold ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+        const labelH = fontSize + 8;
+        const halfH = labelH / 2;
 
         for (const price of group.levels) {
           const paneY = priceToYForScale(price, scale);
@@ -1333,8 +1387,8 @@
             }
           }
         }
-        ctx.restore();
       }
+      ctx.restore();
     }
   }
 
@@ -1862,6 +1916,7 @@
     iframeEl = null; iframeDoc = null; iframeWin = null;
     _overlayRectsCache = []; _overlayRectsTick = 0;
     _paneRectsCache = null;
+    _allPanesCache = null;
     for (const key of Object.keys(services)) services[key] = null;
   }
 
