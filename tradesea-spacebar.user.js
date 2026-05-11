@@ -832,8 +832,8 @@
   function getAllPaneRectsForSymbol(activeSymbol) {
     const now = performance.now();
     if (_paneRectsCache
-        && _paneRectsCache.symbol === activeSymbol
-        && (now - _paneRectsCache.ts) < _PANE_CACHE_TTL) {
+      && _paneRectsCache.symbol === activeSymbol
+      && (now - _paneRectsCache.ts) < _PANE_CACHE_TTL) {
       return _paneRectsCache.rects;
     }
     const rects = _getAllPaneRectsForSymbolUncached(activeSymbol);
@@ -926,7 +926,7 @@
             h: r.height,
           });
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     return rects;
   }
