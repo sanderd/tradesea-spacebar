@@ -1,6 +1,6 @@
 # TradeSea Spacebar Trading — Architecture
 
-> Version 2.2.0 · `tradesea-spacebar.user.js` · ~1500 lines
+> Version 2.2.0 · `tradesea-spacebar.user.js` · ~1680 lines
 
 ## Table of Contents
 
@@ -60,8 +60,9 @@ The script is organized into numbered sections, each with a clear responsibility
 │ §4 Canvas Overlay                  (L406–L442)               │
 │   ensureCanvas, resizeCanvas (fixed position, z-index:10)    │
 ├──────────────────────────────────────────────────────────────┤
-│ §4b Settings UI                    (L444–L825)               │
-│   Full modal: contract slots, hotkeys, price level groups    │
+│ §4b Settings UI                    (L444–L900)               │
+│   Tabbed modal (Hotkeys / Settings / Price Levels),          │
+│   import/export config, version display                      │
 ├──────────────────────────────────────────────────────────────┤
 │ §5 Draw Loop                       (L827–L1153)              │
 │   rAF loop → price levels → spacebar crosshair/labels        │
@@ -138,7 +139,7 @@ draw()
   │   ├─ evenodd clip mask if menus open
   │   ├─ getMatchingPriceLevels() → symbol filter
   │   ├─ getAllPaneRectsForSymbol() → cached 500ms
-  │   └─ drawPriceLevels() → dashed lines + right-aligned labels
+  │   └─ drawPriceLevels() → configurable line style/width + labels
   │
   └─ Spacebar Crosshair (only when spaceHeld)
       ├─ BUY/SELL labels with order type
@@ -180,7 +181,7 @@ This is critical for a trading tool where every click costs real money.
 
 ### Why localStorage with schema versioning?
 
-Config evolves (v1 → v4 so far). Each migration is a `{ fromVersion, toVersion, migrate }`
+Config evolves (v1 → v5 so far). Each migration is a `{ fromVersion, toVersion, migrate }`
 object. Unknown/too-old configs are reset to defaults rather than corrupting state.
 This ensures forward compatibility as features are added.
 

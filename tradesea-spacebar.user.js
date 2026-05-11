@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         TradeSea Spacebar Trading
-// @version      2.2.0
+// @version      2.3.0
 // @description  Hold spacebar to enter quick-order mode. Left-click = Buy, Right-click = Sell. Price & type auto-resolve from mouse position.
 // @match        https://app.tradesea.ai/trade*
 // @grant        none
@@ -73,10 +73,10 @@
 
   // ─── Persisted Configuration ───────────────────────────────────────
   const STORAGE_KEY = 'ts-spacebar-config';
-  const CONFIG_VERSION = 4;
+  const CONFIG_VERSION = 6;
 
   const DEFAULT_CONFIG = {
-    version: 4,
+    version: 6,
     hotkeyWithoutSpacebar: true,
     breakevenHotkey: null,
     contractSlots: [
@@ -87,9 +87,10 @@
       { qty: 5, hotkey: null },
     ],
     priceLevels: [],
-    // Each entry: { id, label, instruments, levels, color }
+    // Each entry: { id, label, instruments, levels, color, lineStyle, lineWidth, showLabels, showPrice, fontSize }
     // instruments: 'NQ,MNQ'  levels: [21000.50, 21100]
-    // color: 'rgba(255,0,255,0.8)'
+    // color: 'rgba(255,0,255,0.8)'  lineStyle: 'dashed'  lineWidth: 1
+    // showLabels: true  showPrice: true  fontSize: 10
   };
 
   // Each entry: { fromVersion, toVersion, migrate(cfg) → cfg }
@@ -112,6 +113,27 @@
       fromVersion: 3, toVersion: 4, migrate: (cfg) => {
         cfg.version = 4;
         cfg.priceLevels = cfg.priceLevels || [];
+        return cfg;
+      }
+    },
+    {
+      fromVersion: 4, toVersion: 5, migrate: (cfg) => {
+        cfg.version = 5;
+        for (const g of (cfg.priceLevels || [])) {
+          if (!g.lineStyle) g.lineStyle = 'dashed';
+          if (!g.lineWidth) g.lineWidth = 1;
+        }
+        return cfg;
+      }
+    },
+    {
+      fromVersion: 5, toVersion: 6, migrate: (cfg) => {
+        cfg.version = 6;
+        for (const g of (cfg.priceLevels || [])) {
+          if (g.showLabels === undefined) g.showLabels = true;
+          if (g.showPrice === undefined) g.showPrice = true;
+          if (!g.fontSize) g.fontSize = 10;
+        }
         return cfg;
       }
     },
@@ -464,14 +486,48 @@
     }
     #ts-sb-panel {
       background: rgba(18,18,28,0.97); border: 1px solid rgba(255,0,255,0.2);
-      border-radius: 16px; padding: 28px 32px; min-width: 440px;
+      border-radius: 16px; padding: 28px 32px; min-width: 480px; max-width: 560px;
       box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(255,0,255,0.08);
       font-family: Inter, system-ui, -apple-system, sans-serif; color: #d8d8e4;
     }
     #ts-sb-panel h2 {
-      margin: 0 0 4px 0; font-size: 15px; color: #ff00ff; font-weight: 600;
+      margin: 0; font-size: 15px; color: #ff00ff; font-weight: 600;
       letter-spacing: 0.3px;
     }
+    .ts-sb-titlebar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .ts-sb-titlebar-left {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ts-sb-titlebar-right {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ts-sb-io-btn {
+      padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(40,40,55,0.8); color: #888; cursor: pointer;
+      font-size: 11px; font-family: inherit; transition: all .15s;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .ts-sb-io-btn:hover { border-color: rgba(255,0,255,0.3); color: #ccc; background: rgba(255,0,255,0.06); }
+    .ts-sb-tabs {
+      display: flex; gap: 2px; margin-bottom: 18px;
+      background: rgba(30,30,42,0.6); border-radius: 10px; padding: 3px;
+    }
+    .ts-sb-tab {
+      flex: 1; padding: 8px 14px; border-radius: 8px; border: none;
+      background: transparent; color: #666; cursor: pointer;
+      font-size: 12px; font-weight: 500; font-family: inherit;
+      transition: all .2s ease; text-align: center;
+    }
+    .ts-sb-tab:hover { color: #aaa; background: rgba(255,255,255,0.03); }
+    .ts-sb-tab.active {
+      background: rgba(255,0,255,0.12); color: #ff00ff;
+      box-shadow: 0 2px 8px rgba(255,0,255,0.1);
+    }
+    .ts-sb-tab-content { display: none; }
+    .ts-sb-tab-content.active { display: block; }
     .ts-sb-subtitle {
       font-size: 11px; color: #666; margin-bottom: 18px;
     }
@@ -564,6 +620,23 @@
     }
     .ts-sb-pl-input:focus { border-color: rgba(255,0,255,0.4); }
     .ts-sb-pl-input::placeholder { color: #444; }
+    .ts-sb-pl-select {
+      padding: 5px 8px; border-radius: 6px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #e0e0ec; font-size: 12px; font-family: inherit; outline: none;
+      transition: border-color .15s; cursor: pointer;
+    }
+    .ts-sb-pl-select:focus { border-color: rgba(255,0,255,0.4); }
+    .ts-sb-pl-select option { background: #1a1a2e; color: #e0e0ec; }
+    .ts-sb-pl-width {
+      width: 50px; padding: 5px 6px; border-radius: 6px;
+      background: rgba(40,40,55,0.9); border: 1px solid rgba(255,255,255,0.08);
+      color: #e0e0ec; font-size: 12px; font-family: monospace; outline: none;
+      text-align: center; -moz-appearance: textfield;
+    }
+    .ts-sb-pl-width::-webkit-inner-spin-button,
+    .ts-sb-pl-width::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .ts-sb-pl-width:focus { border-color: rgba(255,0,255,0.4); }
     .ts-sb-pl-color-wrap {
       display: flex; align-items: center; gap: 8px;
     }
@@ -642,6 +715,11 @@
   function buildPriceLevelGroupHTML(group, idx) {
     const { hex, alpha } = rgbaToHexAlpha(group.color || 'rgba(255,0,255,0.8)');
     const levelsStr = (group.levels || []).join(', ');
+    const ls = group.lineStyle || 'dashed';
+    const lw = group.lineWidth || 1;
+    const showLabels = group.showLabels !== false;
+    const showPrice = group.showPrice !== false;
+    const fontSize = group.fontSize || 10;
     return `
       <div class="ts-sb-pl-group" data-plidx="${idx}">
         <button class="ts-sb-pl-remove" data-plidx="${idx}" title="Remove group">\u2715</button>
@@ -666,6 +744,34 @@
             <input class="ts-sb-pl-alpha" data-plfield="alpha" value="${alpha}" placeholder="0.8">
           </div>
         </div>
+        <div class="ts-sb-pl-row">
+          <span class="ts-sb-pl-label-text">Line Style</span>
+          <select class="ts-sb-pl-select" data-plfield="lineStyle">
+            <option value="solid"${ls === 'solid' ? ' selected' : ''}>Solid</option>
+            <option value="dashed"${ls === 'dashed' ? ' selected' : ''}>Dashed</option>
+            <option value="dotted"${ls === 'dotted' ? ' selected' : ''}>Dotted</option>
+            <option value="dash-dot"${ls === 'dash-dot' ? ' selected' : ''}>Dash-Dot</option>
+          </select>
+          <span class="ts-sb-pl-label-text" style="width:auto;margin-left:8px">Width</span>
+          <input type="number" class="ts-sb-pl-width" data-plfield="lineWidth" value="${lw}" min="1" max="10">
+          <span style="font-size:10px;color:#555">px</span>
+        </div>
+        <div class="ts-sb-pl-row">
+          <span class="ts-sb-pl-label-text">Display</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#aaa">
+            <input type="checkbox" data-plfield="showLabels" ${showLabels ? 'checked' : ''}
+                   style="accent-color:#ff00ff;width:14px;height:14px;cursor:pointer">
+            Labels
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#aaa;margin-left:10px">
+            <input type="checkbox" data-plfield="showPrice" ${showPrice ? 'checked' : ''}
+                   style="accent-color:#ff00ff;width:14px;height:14px;cursor:pointer">
+            Price
+          </label>
+          <span class="ts-sb-pl-label-text" style="width:auto;margin-left:10px">Font</span>
+          <input type="number" class="ts-sb-pl-width" data-plfield="fontSize" value="${fontSize}" min="6" max="24">
+          <span style="font-size:10px;color:#555">px</span>
+        </div>
       </div>`;
   }
 
@@ -673,13 +779,17 @@
     if (settingsOverlay) return;
     const cfg = loadConfig();
 
+    // Extract version from userscript header (GM_info available with some managers)
+    const scriptVersion = (typeof GM_info !== 'undefined' && GM_info?.script?.version) || 'unknown';
+
     settingsOverlay = document.createElement('div');
     settingsOverlay.id = 'ts-sb-backdrop';
 
-    let rows = '';
+    // ── Hotkeys tab content ──
+    let hotkeyRows = '';
     for (let i = 0; i < 5; i++) {
       const s = cfg.contractSlots[i] || { qty: i + 1, hotkey: null };
-      rows += `
+      hotkeyRows += `
         <div class="ts-sb-row">
           <span class="slot-label">Slot ${i + 1}</span>
           <input type="number" class="ts-sb-qty" data-slot="${i}" value="${s.qty}" min="1" max="999">
@@ -690,34 +800,52 @@
         </div>`;
     }
 
+    const hotkeyTab = `
+      <div class="ts-sb-section-label">Contract Sizes</div>
+      <div class="ts-sb-subtitle">Press hotkey to switch size instantly</div>
+      ${hotkeyRows}
+      <div class="ts-sb-section-label" style="margin-top:18px">Actions</div>
+      <div class="ts-sb-row">
+        <span class="slot-label" style="width:auto;min-width:80px">Break-even</span>
+        <input type="text" class="ts-sb-hk" id="ts-sb-be-hk" data-code="${cfg.breakevenHotkey || ''}"
+               value="${formatKeyDisplay(cfg.breakevenHotkey)}" placeholder="Click \u2192 press key" readonly>
+        <button class="ts-sb-clear" id="ts-sb-be-clear" title="Clear hotkey">\u2715</button>
+        <span class="ts-sb-lots">Move SL to avg entry</span>
+      </div>
+      <div class="ts-sb-section-label" style="margin-top:18px">Options</div>
+      <div class="ts-sb-row" style="margin-top:8px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;color:#aaa">
+          <input type="checkbox" id="ts-sb-global-hk" ${cfg.hotkeyWithoutSpacebar ? 'checked' : ''}
+                 style="accent-color:#ff00ff;width:16px;height:16px;cursor:pointer">
+          Lot-size hotkeys work without holding spacebar
+        </label>
+      </div>`;
+
+    // ── Price Levels tab content ──
+    const priceLevelsTab = `
+      <div class="ts-sb-subtitle">Draw horizontal lines on the chart for matching instruments</div>
+      <div id="ts-sb-pl-container">${(cfg.priceLevels || []).map((g, i) => buildPriceLevelGroupHTML(g, i)).join('')}</div>
+      <button class="ts-sb-pl-add" id="ts-sb-pl-add">+ Add Price Level Group</button>`;
+
     settingsOverlay.innerHTML = `
       <div id="ts-sb-panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h2>\u2699\uFE0F Spacebar Trading Settings</h2>
-          <button class="ts-sb-close" id="ts-sb-close">\u2715</button>
+        <div class="ts-sb-titlebar">
+          <div class="ts-sb-titlebar-left">
+            <h2>\u2699\uFE0F Spacebar Trading</h2>
+            <span style="font-size:10px;color:#555;margin-left:4px">v${scriptVersion}</span>
+          </div>
+          <div class="ts-sb-titlebar-right">
+            <button class="ts-sb-io-btn" id="ts-sb-import" title="Import configuration from file">\u2B07 Import</button>
+            <button class="ts-sb-io-btn" id="ts-sb-export" title="Export configuration to file">\u2B06 Export</button>
+            <button class="ts-sb-close" id="ts-sb-close">\u2715</button>
+          </div>
         </div>
-        <div class="ts-sb-section-label">Contract Sizes</div>
-        <div class="ts-sb-subtitle">Press hotkey to switch size instantly</div>
-        ${rows}
-        <div class="ts-sb-section-label" style="margin-top:18px">Actions</div>
-        <div class="ts-sb-row">
-          <span class="slot-label" style="width:auto;min-width:80px">Break-even</span>
-          <input type="text" class="ts-sb-hk" id="ts-sb-be-hk" data-code="${cfg.breakevenHotkey || ''}"
-                 value="${formatKeyDisplay(cfg.breakevenHotkey)}" placeholder="Click \u2192 press key" readonly>
-          <button class="ts-sb-clear" id="ts-sb-be-clear" title="Clear hotkey">\u2715</button>
-          <span class="ts-sb-lots">Move SL to avg entry</span>
+        <div class="ts-sb-tabs">
+          <button class="ts-sb-tab active" data-tab="hotkeys">Hotkeys</button>
+          <button class="ts-sb-tab" data-tab="pricelevels">Price Levels</button>
         </div>
-        <div class="ts-sb-row" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05)">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;color:#aaa">
-            <input type="checkbox" id="ts-sb-global-hk" ${cfg.hotkeyWithoutSpacebar ? 'checked' : ''}
-                   style="accent-color:#ff00ff;width:16px;height:16px;cursor:pointer">
-            Lot-size hotkeys work without holding spacebar
-          </label>
-        </div>
-        <div class="ts-sb-section-label" style="margin-top:18px">Price Levels</div>
-        <div class="ts-sb-subtitle">Draw horizontal lines on the chart for matching instruments</div>
-        <div id="ts-sb-pl-container">${(cfg.priceLevels || []).map((g, i) => buildPriceLevelGroupHTML(g, i)).join('')}</div>
-        <button class="ts-sb-pl-add" id="ts-sb-pl-add">+ Add Price Level Group</button>
+        <div class="ts-sb-tab-content active" data-tab-content="hotkeys">${hotkeyTab}</div>
+        <div class="ts-sb-tab-content" data-tab-content="pricelevels">${priceLevelsTab}</div>
         <div class="ts-sb-actions">
           <button class="ts-sb-btn-cancel" id="ts-sb-cancel">Cancel</button>
           <button class="ts-sb-btn-save" id="ts-sb-save">Save</button>
@@ -726,12 +854,65 @@
 
     document.body.appendChild(settingsOverlay);
 
-    // Close handlers
+    // ── Tab switching ──
+    settingsOverlay.querySelectorAll('.ts-sb-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        settingsOverlay.querySelectorAll('.ts-sb-tab').forEach(t => t.classList.remove('active'));
+        settingsOverlay.querySelectorAll('.ts-sb-tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        settingsOverlay.querySelector(`[data-tab-content="${tab.dataset.tab}"]`)?.classList.add('active');
+      });
+    });
+
+    // ── Close handlers ──
     settingsOverlay.querySelector('#ts-sb-close').addEventListener('click', closeSettings);
     settingsOverlay.querySelector('#ts-sb-cancel').addEventListener('click', closeSettings);
     settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
-    // Save handler
+    // ── Export handler ──
+    settingsOverlay.querySelector('#ts-sb-export')?.addEventListener('click', () => {
+      const data = JSON.stringify(loadConfig(), null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ts-spacebar-config.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      log('Config exported');
+    });
+
+    // ── Import handler ──
+    settingsOverlay.querySelector('#ts-sb-import')?.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const imported = JSON.parse(reader.result);
+            const migrated = applyMigrations(imported);
+            saveConfig(migrated);
+            userConfig = migrated;
+            closeSettings();
+            openSettings(); // Re-open with imported data
+            log('Config imported');
+          } catch (e) {
+            err('Config import failed:', e.message);
+            alert('Invalid config file: ' + e.message);
+          }
+        };
+        reader.readAsText(file);
+      });
+      input.click();
+    });
+
+    // ── Save handler ──
     settingsOverlay.querySelector('#ts-sb-save').addEventListener('click', () => {
       const newCfg = structuredClone(DEFAULT_CONFIG);
       newCfg.hotkeyWithoutSpacebar = settingsOverlay.querySelector('#ts-sb-global-hk')?.checked ?? true;
@@ -752,9 +933,14 @@
         const levelsRaw = grp.querySelector('[data-plfield="levels"]')?.value || '';
         const hex = grp.querySelector('[data-plfield="hex"]')?.value || '#ff00ff';
         const alpha = parseFloat(grp.querySelector('[data-plfield="alpha"]')?.value) || 0.8;
+        const lineStyle = grp.querySelector('[data-plfield="lineStyle"]')?.value || 'dashed';
+        const lineWidth = Math.max(1, Math.min(10, parseInt(grp.querySelector('[data-plfield="lineWidth"]')?.value) || 1));
+        const showLabels = grp.querySelector('[data-plfield="showLabels"]')?.checked !== false;
+        const showPrice = grp.querySelector('[data-plfield="showPrice"]')?.checked !== false;
+        const fontSize = Math.max(6, Math.min(24, parseInt(grp.querySelector('[data-plfield="fontSize"]')?.value) || 10));
         const levels = parsePriceLevels(levelsRaw);
         if (instruments && levels.length > 0) {
-          newCfg.priceLevels.push({ id: Date.now() + Math.random(), instruments, label, levels, color: hexToRgba(hex, alpha) });
+          newCfg.priceLevels.push({ id: Date.now() + Math.random(), instruments, label, levels, color: hexToRgba(hex, alpha), lineStyle, lineWidth, showLabels, showPrice, fontSize });
         }
       });
       saveConfig(newCfg);
@@ -790,12 +976,26 @@
       const inp = settingsOverlay.querySelector('#ts-sb-be-hk');
       if (inp) { inp.value = ''; inp.dataset.code = ''; }
     });
-    // Price level: add group
+    // Price level: add group (copies rendering settings from previous group)
     settingsOverlay.querySelector('#ts-sb-pl-add')?.addEventListener('click', () => {
       const container = settingsOverlay.querySelector('#ts-sb-pl-container');
-      const idx = container.querySelectorAll('.ts-sb-pl-group').length;
+      const existing = container.querySelectorAll('.ts-sb-pl-group');
+      const idx = existing.length;
+      // Copy rendering settings from last group if one exists
+      let defaults = { instruments: '', label: '', levels: [], color: 'rgba(255,0,255,0.8)', lineStyle: 'dashed', lineWidth: 1, showLabels: true, showPrice: true, fontSize: 10 };
+      if (existing.length > 0) {
+        const last = existing[existing.length - 1];
+        const hex = last.querySelector('[data-plfield="hex"]')?.value || '#ff00ff';
+        const alpha = parseFloat(last.querySelector('[data-plfield="alpha"]')?.value) || 0.8;
+        defaults.color = hexToRgba(hex, alpha);
+        defaults.lineStyle = last.querySelector('[data-plfield="lineStyle"]')?.value || 'dashed';
+        defaults.lineWidth = parseInt(last.querySelector('[data-plfield="lineWidth"]')?.value) || 1;
+        defaults.showLabels = last.querySelector('[data-plfield="showLabels"]')?.checked !== false;
+        defaults.showPrice = last.querySelector('[data-plfield="showPrice"]')?.checked !== false;
+        defaults.fontSize = parseInt(last.querySelector('[data-plfield="fontSize"]')?.value) || 10;
+      }
       const div = document.createElement('div');
-      div.innerHTML = buildPriceLevelGroupHTML({ instruments: '', label: '', levels: [], color: 'rgba(255,0,255,0.8)' }, idx);
+      div.innerHTML = buildPriceLevelGroupHTML(defaults, idx);
       const grp = div.firstElementChild;
       container.appendChild(grp);
       wireUpPriceLevelGroup(grp);
@@ -931,6 +1131,18 @@
     return rects;
   }
 
+  /** Convert a lineStyle name to a canvas dash pattern array. */
+  function lineStyleToDash(style, width) {
+    const w = width || 1;
+    switch (style) {
+      case 'solid':    return [];
+      case 'dotted':   return [w, w * 2];
+      case 'dash-dot': return [w * 6, w * 2, w, w * 2];
+      case 'dashed':
+      default:         return [w * 4, w * 3];
+    }
+  }
+
   /** Draw configured price levels on all matching chart panes. */
   function drawPriceLevels(iframeRect) {
     const groups = getMatchingPriceLevels();
@@ -940,15 +1152,18 @@
     const panes = getAllPaneRectsForSymbol(sym);
     if (panes.length === 0) return;
 
-    const levelFont = 'bold 10px Inter, system-ui, -apple-system, sans-serif';
-    const labelH = 18;
-    const halfH = labelH / 2;
-
     for (const group of groups) {
       const color = group.color || 'rgba(255,0,255,0.8)';
-      // Parse RGBA to get a dimmer version for the line
       let lineColor = color;
       let labelBg = color;
+      const groupLineWidth = group.lineWidth || 1;
+      const groupDash = lineStyleToDash(group.lineStyle, groupLineWidth);
+      const showLabels = group.showLabels !== false;
+      const showPrice = group.showPrice !== false;
+      const fontSize = group.fontSize || 10;
+      const levelFont = `bold ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+      const labelH = fontSize + 8;
+      const halfH = labelH / 2;
 
       for (const { paneRect, scale } of panes) {
         if (!scale) continue;
@@ -968,32 +1183,37 @@
           const drawY = iframeRect.top + paneRect.top + paneY;
           if (drawY < clipTop || drawY > clipBottom) continue;
 
-          // ── Horizontal dashed line ──
+          // ── Horizontal line (style + width from config) ──
           ctx.beginPath();
           ctx.strokeStyle = lineColor;
-          ctx.lineWidth = 1;
-          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = groupLineWidth;
+          ctx.setLineDash(groupDash);
           ctx.moveTo(clipLeft, drawY);
           ctx.lineTo(clipRight, drawY);
           ctx.stroke();
           ctx.setLineDash([]);
 
-          // ── Right-aligned label tag ──
-          ctx.font = levelFont;
-          const priceText = String(price);
-          const labelText = group.label ? `${group.label}  ${priceText}` : priceText;
-          const textW = ctx.measureText(labelText).width + 12;
-          const tagX = clipRight - textW - 4;
+          // ── Right-aligned label tag (conditional) ──
+          if (showLabels || showPrice) {
+            ctx.font = levelFont;
+            const parts = [];
+            if (showLabels && group.label) parts.push(group.label);
+            if (showPrice) parts.push(String(price));
+            const labelText = parts.join('  ');
+            if (labelText) {
+              const textW = ctx.measureText(labelText).width + 12;
+              const tagX = clipRight - textW - 4;
 
-          ctx.fillStyle = labelBg;
-          ctx.globalAlpha = 0.85;
-          ctx.fillRect(tagX, drawY - halfH, textW, labelH);
-          ctx.globalAlpha = 1;
+              ctx.fillStyle = labelBg;
+              ctx.globalAlpha = 0.85;
+              ctx.fillRect(tagX, drawY - halfH, textW, labelH);
+              ctx.globalAlpha = 1;
 
-          // Text color: auto black/white based on bg luminance
-          ctx.fillStyle = '#ffffff';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(labelText, tagX + 6, drawY);
+              ctx.fillStyle = '#ffffff';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(labelText, tagX + 6, drawY);
+            }
+          }
         }
         ctx.restore();
       }
