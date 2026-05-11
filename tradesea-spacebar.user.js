@@ -1829,17 +1829,7 @@
       set qty(n) { services.orderController?.setQuantity(n); },
       get tickSize() { return getTickSize(); },
       get ready() { return !!(services.tradingService && services.accountService && iframeDoc); },
-      destroy() {
-        cleanupFns.forEach(fn => fn());
-        cleanupFns = [];
-        if (rafId) cancelAnimationFrame(rafId);
-        if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
-        canvas = null; ctx = null;
-        destroySettingsUI();
-        spaceHeld = false;
-        delete window.tsSpacebar;
-        log('Destroyed');
-      },
+      destroy() { teardown(); delete window.tsSpacebar; log('Destroyed'); },
     };
 
     const acct = services.accountService.getCurrentAccount();
@@ -1849,6 +1839,88 @@
     log('  Hold SPACEBAR over chart, then:');
     log('    Left-click  → BUY  (limit below market, stop above)');
     log('    Right-click → SELL (limit above market, stop below)');
+
+    // 7. Start iframe watchdog (handles FundedSeat account switching)
+    startIframeWatchdog();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  TEARDOWN — resets all state so init() can safely re-run
+  // ═══════════════════════════════════════════════════════════════════
+  function teardown() {
+    stopIframeWatchdog();
+    cleanupFns.forEach(fn => { try { fn(); } catch (_) {} });
+    cleanupFns = [];
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+    canvas = null; ctx = null;
+    destroySettingsUI();
+    spaceHeld = false;
+    pendingOrder = null;
+    mouseY = null; mousePrice = null;
+    lastIframeMouseX = null; lastIframeMouseY = null;
+    iframeEl = null; iframeDoc = null; iframeWin = null;
+    _overlayRectsCache = []; _overlayRectsTick = 0;
+    _paneRectsCache = null;
+    for (const key of Object.keys(services)) services[key] = null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  IFRAME WATCHDOG — detects account switches / iframe replacement
+  // ═══════════════════════════════════════════════════════════════════
+  let _watchdogTimer = null;
+  let _reinitializing = false;
+  const WATCHDOG_INTERVAL_MS = 2000;
+
+  function startIframeWatchdog() {
+    stopIframeWatchdog();
+    _watchdogTimer = setInterval(checkIframeHealth, WATCHDOG_INTERVAL_MS);
+  }
+
+  function stopIframeWatchdog() {
+    if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
+  }
+
+  function checkIframeHealth() {
+    if (_reinitializing) return;
+
+    // Check 1: is the cached iframe still in the DOM?
+    const stillAttached = iframeEl && iframeEl.isConnected;
+
+    // Check 2: does the iframe's contentWindow still match what we captured?
+    let windowChanged = false;
+    if (stillAttached) {
+      try {
+        windowChanged = iframeEl.contentWindow !== iframeWin;
+      } catch (_) {
+        windowChanged = true; // cross-origin = definitely changed
+      }
+    }
+
+    // Check 3: did a new iframe appear that we don't have a reference to?
+    const currentIframe = document.querySelector('iframe');
+    const iframeSwapped = currentIframe && currentIframe !== iframeEl;
+
+    if (!stillAttached || windowChanged || iframeSwapped) {
+      warn('Iframe changed (account switch detected) — reinitializing...');
+      reinitialize();
+    }
+  }
+
+  async function reinitialize() {
+    if (_reinitializing) return;
+    _reinitializing = true;
+
+    try {
+      teardown();
+      // Small delay to let Angular re-bootstrap
+      await new Promise(r => setTimeout(r, 1500));
+      await init();
+    } catch (e) {
+      err('Reinit failed:', e.message);
+    } finally {
+      _reinitializing = false;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
