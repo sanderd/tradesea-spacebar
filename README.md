@@ -7,8 +7,8 @@ A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea.
 - [Features](#features)
 - [Demo video](#demo-video)
 - [Installation](#installation)
-- [Development](#development)
 - [Important Notes](#important-notes)
+- [Development](#development)
 - [Security](#security)
 - [Disclaimer](#disclaimer)
 
@@ -57,14 +57,14 @@ Tampermonkey should detect the `.user.js` extension and offer to install it auto
 
 This script **does not auto-update**. To update, repeat the installation steps above with the newer version.
 
-## Development
-
-See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions, dev workflow, and release process.
-
 ## Important Notes
 
 - TradeSea platform updates **may break this script** without warning, since it hooks into internal APIs and DOM structures.
 - The script works on `https://app.tradesea.ai/trade*` and `https://app.tradesea.ai/account-center*` pages.
+
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions, dev workflow, and release process.
 
 ## Disclaimer
 
