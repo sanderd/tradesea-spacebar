@@ -838,32 +838,76 @@ function _getAllChartPanesUncached() {
   const count = api.chartsCount?.() || 1;
   const containers = S.iframeDoc.querySelectorAll('.chart-container');
 
+  // Normal path: container count matches chart count — use direct index mapping
+  if (containers.length >= count) {
+    for (let i = 0; i < count; i++) {
+      _pushPaneEntry(results, api.chart(i), containers[i]);
+    }
+    return results;
+  }
+
+  // Fullscreen path: fewer containers than charts (hidden panels).
+  // Match each visible container to its API chart via symbol comparison.
+  const charts = [];
   for (let i = 0; i < count; i++) {
     try {
       const chart = api.chart(i);
-      if (!chart) continue;
-      const sym = chart.symbol?.() || chart.symbolExt?.()?.ticker || '';
+      if (chart) charts.push(chart);
+    } catch (_) { /* skip */ }
+  }
+
+  for (const container of containers) {
+    if (container.offsetWidth < 2 || container.offsetHeight < 2) continue;
+    const wrapper = container.querySelector('.chart-gui-wrapper');
+    const canvasEl = wrapper?.querySelector('canvas') || container.querySelector('canvas');
+    if (!canvasEl) continue;
+
+    // Try to match this container to a chart by finding its symbol
+    // In fullscreen, the active chart owns the single visible container
+    let matchedChart = null;
+    const activeChart = api.activeChart?.();
+    if (activeChart && charts.includes(activeChart)) {
+      matchedChart = activeChart;
+    } else if (charts.length === 1) {
+      matchedChart = charts[0];
+    }
+
+    if (matchedChart) {
+      const sym = matchedChart.symbol?.() || matchedChart.symbolExt?.()?.ticker || '';
       if (!sym) continue;
-
-      const container = containers[i];
-      if (!container) continue;
-      const wrapper = container.querySelector('.chart-gui-wrapper');
-      const canvasEl = wrapper?.querySelector('canvas') || container.querySelector('canvas');
-      if (!canvasEl) continue;
-
-      const chartPanes = chart.getPanes();
+      const chartPanes = matchedChart.getPanes();
       const scale = chartPanes?.[0]?.getMainSourcePriceScale?.()
         || chartPanes?.[0]?.getRightPriceScale?.()
         || chartPanes?.[0]?.getLeftPriceScale?.();
-
       results.push({
         symbol: sym,
         paneRect: canvasEl.getBoundingClientRect(),
         scale,
       });
-    } catch (e) { /* skip broken chart */ }
+    }
   }
   return results;
+}
+
+/** Shared helper to push a single pane entry from a chart + container pair. */
+function _pushPaneEntry(results, chart, container) {
+  try {
+    if (!chart || !container) return;
+    const sym = chart.symbol?.() || chart.symbolExt?.()?.ticker || '';
+    if (!sym) return;
+    const wrapper = container.querySelector('.chart-gui-wrapper');
+    const canvasEl = wrapper?.querySelector('canvas') || container.querySelector('canvas');
+    if (!canvasEl) return;
+    const chartPanes = chart.getPanes();
+    const scale = chartPanes?.[0]?.getMainSourcePriceScale?.()
+      || chartPanes?.[0]?.getRightPriceScale?.()
+      || chartPanes?.[0]?.getLeftPriceScale?.();
+    results.push({
+      symbol: sym,
+      paneRect: canvasEl.getBoundingClientRect(),
+      scale,
+    });
+  } catch (_) { /* skip broken chart */ }
 }
 
 /**
