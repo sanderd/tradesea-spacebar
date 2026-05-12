@@ -1036,14 +1036,49 @@ function drawPriceLevels(iframeRect) {
   }
 }
 
+// ── Dirty-checking for price levels (skip redraw when scale unchanged) ─
+let _priceLevelFingerprint = '';
+
+/**
+ * Build a fingerprint string from current pane positions and scale
+ * coefficients. When this matches the previous frame AND no crosshair
+ * is active, we can skip clearing and redrawing entirely.
+ */
+function _buildPriceLevelFingerprint(allPanes) {
+  let fp = '';
+  for (const { paneRect, scale } of allPanes) {
+    const c = _scaleCoeffCache.get(scale);
+    fp += `${paneRect.top|0},${paneRect.left|0},${paneRect.width|0},${paneRect.height|0},`;
+    fp += c ? `${c.p1},${c.p2};` : '?;';
+  }
+  return fp;
+}
+
 function draw() {
   S.rafId = requestAnimationFrame(draw);
   if (!S.ctx || document.hidden) return;
 
   const iframeRect = getIframeRect();
   const hasPriceLevels = S.userConfig?.priceLevels?.length > 0;
+  const crosshairActive = S.spaceHeld && S.mousePrice != null;
 
-  // Clear canvas every frame
+  // If only price levels are drawn (no crosshair), check if anything changed
+  if (hasPriceLevels && !crosshairActive && iframeRect) {
+    const allPanes = getAllChartPanes();
+    // Probe scales to populate coefficient cache (needed for fingerprint)
+    for (const { scale } of allPanes) {
+      if (scale) _getScaleCoeffs(scale);
+    }
+    const fp = _buildPriceLevelFingerprint(allPanes);
+    if (fp === _priceLevelFingerprint && fp !== '' && _overlayRectsTick !== 0) {
+      return; // nothing changed — skip clear + redraw
+    }
+    _priceLevelFingerprint = fp;
+  } else if (crosshairActive) {
+    _priceLevelFingerprint = ''; // crosshair active — always redraw
+  }
+
+  // Clear canvas
   S.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
   // Always draw price levels (even without spacebar)
@@ -1071,7 +1106,7 @@ function draw() {
   }
 
   // Spacebar crosshair — only when active
-  if (!S.spaceHeld || S.mousePrice == null) return;
+  if (!crosshairActive) return;
   if (!iframeRect) return;
 
   const tickSize = getTickSize();
@@ -1208,6 +1243,7 @@ function draw() {
 function resetCanvasCaches() {
   _overlayRectsCache = []; _overlayRectsTick = 0;
   _allPanesCache = null;
+  _priceLevelFingerprint = '';
 }
 
 export {
