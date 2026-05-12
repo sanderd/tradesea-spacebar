@@ -866,18 +866,51 @@ function _getAllChartPanesUncached() {
   return results;
 }
 
-/** Convert a price to pane-local Y for a given scale (reusable). */
-function priceToYForScale(price, scale) {
-  const y1 = 50, y2 = 300;
+/**
+ * Scale coefficient cache — avoids calling coordinateToPrice() twice per
+ * price level per pane per frame. Keyed by scale object (WeakMap for GC).
+ * Each entry stores the sampled coefficients AND a price→Y Map that remains
+ * valid as long as the scale's linear mapping hasn't changed (no zoom/scroll).
+ */
+const _scaleCoeffCache = new WeakMap();
+const _COEFF_Y1 = 50, _COEFF_Y2 = 300;
+
+function _getScaleCoeffs(scale) {
   let p1, p2;
   try {
-    p1 = scale.coordinateToPrice(y1);
-    p2 = scale.coordinateToPrice(y2);
+    p1 = scale.coordinateToPrice(_COEFF_Y1);
+    p2 = scale.coordinateToPrice(_COEFF_Y2);
   } catch (e) { return null; }
   if (p1 == null || p2 == null || !isFinite(p1) || !isFinite(p2)) return null;
   if (Math.abs(p2 - p1) < 1e-10) return null;
-  const y = y1 + (price - p1) * (y2 - y1) / (p2 - p1);
-  return isFinite(y) ? y : null;
+
+  const prev = _scaleCoeffCache.get(scale);
+  if (prev && prev.p1 === p1 && prev.p2 === p2) {
+    return prev; // scale unchanged — reuse cached price→Y map
+  }
+
+  // Scale changed (zoom/scroll) — build fresh cache entry
+  const entry = {
+    p1, p2,
+    slope: (_COEFF_Y2 - _COEFF_Y1) / (p2 - p1),
+    yCache: new Map(),  // price → pane-local Y
+  };
+  _scaleCoeffCache.set(scale, entry);
+  return entry;
+}
+
+/** Convert a price to pane-local Y for a given scale (cached per scale). */
+function priceToYForScale(price, scale) {
+  const c = _getScaleCoeffs(scale);
+  if (!c) return null;
+
+  const cached = c.yCache.get(price);
+  if (cached !== undefined) return cached;
+
+  const y = _COEFF_Y1 + (price - c.p1) * c.slope;
+  const result = isFinite(y) ? y : null;
+  c.yCache.set(price, result);
+  return result;
 }
 
 /**
