@@ -16,13 +16,14 @@ A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea.
 
 ## 🧩 Features
 
-- **Spacebar quick-order mode** -- hold spacebar, left-click to buy, right-click to sell at the pointed price
-- **Auto order type** -- automatically picks limit or stop based on price relative to market
-- **Configurable contract size slots** with bindable hotkeys for instant switching
-- **Break-even hotkey** -- move stop loss to average entry with a single keypress
-- **Price levels overlay** -- configure horizontal price lines per instrument (e.g. NQ, MNQ) with custom labels and colors (including alpha). Lines are drawn directly over the chart, always visible, with a right-aligned label tag
-- **Visual overlay** -- magenta crosshair with buy/sell labels rendered across all charts showing the same symbol
-- **Account nicknames** -- assign custom display names to trading accounts
+- **Spacebar quick-order mode** — hold spacebar, left-click to buy, right-click to sell at the pointed price
+  - Auto order type — automatically picks limit or stop based on price relative to market
+- **Hotkeys**
+  - Configurable contract size slots with bindable keys for instant switching
+  - Break-even — move stop loss to average entry with a single keypress
+- **Visual overlay** — crosshair with buy/sell labels rendered across all charts showing the same symbol
+- **Price levels** — configure horizontal lines per instrument (e.g. NQ, MNQ) with custom labels and colors. Always visible, with right-aligned label tags
+- **Account nicknames** — assign custom display names to trading accounts
 
 ## 🎬 Demo video
 
