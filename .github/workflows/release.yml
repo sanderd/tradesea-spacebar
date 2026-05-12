@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,18 +27,32 @@ jobs:
       - name: Build userscript
         run: npx rollup -c
 
-      - name: Determine version for release name
+      - name: Determine version
         id: version
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          MAJOR_MINOR="${TAG#v}"
-          COMMITS=$(git rev-list --count "${TAG}..HEAD" 2>/dev/null || echo "0")
-          echo "version=${MAJOR_MINOR}.${COMMITS}" >> "$GITHUB_OUTPUT"
+          # Use git describe — same logic as rollup.config.mjs
+          DESC=$(git describe --tags --match "v*" --long 2>/dev/null || echo "")
+          if [[ "$DESC" =~ ^v([0-9]+\.[0-9]+)-([0-9]+)-g ]]; then
+            VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            TAG="v${BASH_REMATCH[1]}"
+          else
+            COUNT=$(git rev-list --count HEAD)
+            VERSION="0.0.${COUNT}"
+            TAG="v0.0"
+          fi
+
+          # For tag pushes, use the pushed tag; for manual dispatch, auto-tag
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.version.outputs.tag }}
           name: "v${{ steps.version.outputs.version }}"
           files: dist/tradesea-spacebar.user.js
           generate_release_notes: true
