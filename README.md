@@ -66,6 +66,28 @@ This script **does not auto-update**. To update, repeat the installation steps a
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions, dev workflow, and release process.
 
+## Security
+
+Running userscripts from the internet means executing someone else's code in your browser. Trust, but verify.
+
+**What you can check:**
+- **Source code** — the full source is available in this repository.
+- **Reproducible builds** — every release is built by a [public GitHub Actions workflow](.github/workflows/release.yml) (`npm ci` → `npx rollup -c`), so the release artifact matches the committed source.
+- **No network calls** — this script makes zero external requests. It only interacts with the TradeSea page DOM and TradingView iframe already loaded in your browser.
+
+**Verify it yourself** — paste this prompt into your AI of choice:
+
+> Fetch the userscript from
+> `https://github.com/sanderd/tradesea-spacebar/releases/latest/download/tradesea-spacebar.user.js`
+> and audit the code for security risks. Specifically check for:
+> - Outbound network requests (fetch, XMLHttpRequest, WebSocket, sendBeacon, image pings)
+> - Credential or cookie access / exfiltration
+> - Accessing localStorage/sessionStorage of other origins
+> - Dynamic code execution (eval, Function constructor, script injection)
+> - Any data leaving the page to an external server
+>
+> Summarise your findings and assign an overall risk level.
+
 ## Disclaimer
 
 This software is provided as-is, with no warranty of any kind. Use at your own risk. The author assumes no liability for financial losses, incorrect order placement, or any other damages arising from the use of this script. This is an unsupported personal tool -- not affiliated with or endorsed by TradeSea.
