@@ -1075,8 +1075,12 @@ function draw() {
     for (const { scale } of allPanes) {
       if (scale) _getScaleCoeffs(scale);
     }
-    // Include overlay count in fingerprint so menu open/close triggers redraw
-    const fp = _buildPriceLevelFingerprint(allPanes) + `o${_overlayRectsCache.length}`;
+    // Include overlay positions in fingerprint so menu reposition triggers redraw
+    let overlayFp = 'o';
+    for (const r of _overlayRectsCache) {
+      overlayFp += `${r.x|0},${r.y|0},${r.w|0},${r.h|0};`;
+    }
+    const fp = _buildPriceLevelFingerprint(allPanes) + overlayFp;
     if (fp === _priceLevelFingerprint && fp !== '') {
       return; // nothing changed — skip clear + redraw
     }
