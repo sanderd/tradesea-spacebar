@@ -941,33 +941,32 @@ function priceToYForScale(price, scale) {
  * Collect bounding rects (in main-document coords) of any open
  * TradingView menus, dialogs, or popups inside the iframe.
  * Returns an empty array when nothing is open (common case).
+ * Uses a single combined selector for one DOM traversal.
  */
+const _OVERLAY_SELECTOR = [
+  '[class*="menuWrap"]', '[class*="contextMenu"]',
+  '[data-name="menu"]', '[class*="dialog"]',
+  '[class*="popup"]',  '[class*="Modal"]',
+  '[role="dialog"]',   '[role="menu"]',
+  '[role="listbox"]',
+].join(',');
+
 function getTvOverlayRects(iframeRect) {
   if (!S.iframeDoc) return [];
   const rects = [];
-  // These selectors only match transient elements (verified via DOM inspection)
-  const selectors = [
-    '[class*="menuWrap"]', '[class*="contextMenu"]',
-    '[data-name="menu"]', '[class*="dialog"]',
-    '[class*="popup"]',
-    '[class*="Modal"]', '[role="dialog"]', '[role="menu"]',
-    '[role="listbox"]',
-  ];
-  for (const sel of selectors) {
-    try {
-      const els = S.iframeDoc.querySelectorAll(sel);
-      for (const el of els) {
-        const r = el.getBoundingClientRect();
-        if (r.width < 2 || r.height < 2) continue; // skip invisible
-        rects.push({
-          x: iframeRect.left + r.left,
-          y: iframeRect.top + r.top,
-          w: r.width,
-          h: r.height,
-        });
-      }
-    } catch (_) { }
-  }
+  try {
+    const els = S.iframeDoc.querySelectorAll(_OVERLAY_SELECTOR);
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue; // skip invisible
+      rects.push({
+        x: iframeRect.left + r.left,
+        y: iframeRect.top + r.top,
+        w: r.width,
+        h: r.height,
+      });
+    }
+  } catch (_) { }
   return rects;
 }
 
@@ -1073,8 +1072,8 @@ function draw() {
 
   // Always draw price levels (even without spacebar)
   if (iframeRect && hasPriceLevels) {
-    // Refresh overlay rects every ~12 frames (~200ms at 60fps)
-    if (++_overlayRectsTick >= 12) {
+    // Refresh overlay rects every ~30 frames (~500ms at 60fps)
+    if (++_overlayRectsTick >= 30) {
       _overlayRectsTick = 0;
       _overlayRectsCache = getTvOverlayRects(iframeRect);
     }
