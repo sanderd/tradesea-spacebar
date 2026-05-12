@@ -512,19 +512,33 @@ function startNicknameObserver() {
   injectNicknameCSS();
 
   _nicknameObserver = new MutationObserver(() => {
-    // Debounce to avoid excessive processing
+    // Debounce to avoid excessive processing during React re-renders
     if (_nicknameDebounce) clearTimeout(_nicknameDebounce);
     _nicknameDebounce = setTimeout(() => {
       // Don't process while editing
       if (document.querySelector('.ts-nick-edit-input')) return;
       applyNicknames();
-    }, 150);
+    }, 300);
   });
 
-  _nicknameObserver.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
+  const observeOpts = { childList: true, subtree: true };
+
+  // Narrow observation to containers where nicknames actually appear,
+  // avoiding the entire document.body which fires on every React re-render.
+  const targets = [
+    document.querySelector('aside'),                          // sidebar
+    document.querySelector('header, [class*="top-bar"]'),     // header bar
+    document.querySelector('[class*="account"]'),             // account widgets
+  ].filter(Boolean);
+
+  if (targets.length > 0) {
+    for (const t of targets) {
+      _nicknameObserver.observe(t, observeOpts);
+    }
+  } else {
+    // Fallback: observe body if no narrower targets found
+    _nicknameObserver.observe(document.body, observeOpts);
+  }
 
   // Initial pass
   setTimeout(applyNicknames, 500);
