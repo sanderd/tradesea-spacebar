@@ -4,17 +4,17 @@ A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea.
 
 ---
 
-- [Features](#features)
-- [Demo video](#demo-video)
-- [Installation](#installation)
-- [Important Notes](#important-notes)
-- [Development](#development)
-- [Security](#security)
-- [Disclaimer](#disclaimer)
+- [🧩 Features](#-features)
+- [🎬 Demo video](#-demo-video)
+- [📦 Installation](#-installation)
+- [⚠️ Important Notes](#%EF%B8%8F-important-notes)
+- [🔧 Development](#-development)
+- [🔒 Security](#-security)
+- [📄 Disclaimer](#-disclaimer)
 
 ---
 
-## Features
+## 🧩 Features
 
 - **Spacebar quick-order mode** -- hold spacebar, left-click to buy, right-click to sell at the pointed price
 - **Auto order type** -- automatically picks limit or stop based on price relative to market
@@ -24,7 +24,7 @@ A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea.
 - **Visual overlay** -- magenta crosshair with buy/sell labels rendered across all charts showing the same symbol
 - **Account nicknames** -- assign custom display names to trading accounts
 
-## Demo video
+## 🎬 Demo video
 
 https://youtu.be/-D2Mv_recOc
 
@@ -32,7 +32,7 @@ https://youtu.be/-D2Mv_recOc
 
 ![Screenshot 2](https://github.com/sanderd/tradesea-spacebar/raw/master/Screenshot%202026-05-07%20150752.png)
 
-## Installation
+## 📦 Installation
 
 Requires [Tampermonkey](https://www.tampermonkey.net/) browser extension.
 
@@ -57,16 +57,16 @@ Tampermonkey should detect the `.user.js` extension and offer to install it auto
 
 This script **does not auto-update**. To update, repeat the installation steps above with the newer version.
 
-## Important Notes
+## ⚠️ Important Notes
 
 - TradeSea platform updates **may break this script** without warning, since it hooks into internal APIs and DOM structures.
 - The script works on `https://app.tradesea.ai/trade*` and `https://app.tradesea.ai/account-center*` pages.
 
-## Development
+## 🔧 Development
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions, dev workflow, and release process.
 
-## Security
+## 🔒 Security
 
 Running userscripts from the internet means executing someone else's code in your browser. Trust, but verify.
 
@@ -88,6 +88,6 @@ Running userscripts from the internet means executing someone else's code in you
 >
 > Summarise your findings and assign an overall risk level.
 
-## Disclaimer
+## 📄 Disclaimer
 
 This software is provided as-is, with no warranty of any kind. Use at your own risk. The author assumes no liability for financial losses, incorrect order placement, or any other damages arising from the use of this script. This is an unsupported personal tool -- not affiliated with or endorsed by TradeSea.
