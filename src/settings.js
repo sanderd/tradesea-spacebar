@@ -8,6 +8,11 @@ import { getNicknameMap, clearAllNicknames } from './nicknames.js';
 //  4b. SETTINGS UI
 // ═══════════════════════════════════════════════════════════════════
 
+/** Escape a string for safe interpolation into HTML attribute values. */
+function escapeHTMLAttr(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 const SETTINGS_CSS = `
   #ts-sb-btn {
     width: 100%; height: 40px; border-radius: 8px;
@@ -214,7 +219,7 @@ function createSettingsUI() {
 
   S.settingsBtn = document.createElement('button');
   S.settingsBtn.id = 'ts-sb-btn';
-  S.settingsBtn.innerHTML = '🚀';
+  S.settingsBtn.textContent = '🚀';
   S.settingsBtn.title = 'Spacebar Trading Settings';
   S.settingsBtn.addEventListener('click', openSettings);
 
@@ -266,15 +271,15 @@ function buildPriceLevelGroupHTML(group, idx) {
       <button class="ts-sb-pl-remove" data-plidx="${idx}" title="Remove group">\u2715</button>
       <div class="ts-sb-pl-row">
         <span class="ts-sb-pl-label-text">Instruments</span>
-        <input class="ts-sb-pl-input" data-plfield="instruments" value="${group.instruments || ''}" placeholder="NQ, MNQ">
+        <input class="ts-sb-pl-input" data-plfield="instruments" value="${escapeHTMLAttr(group.instruments || '')}" placeholder="NQ, MNQ">
       </div>
       <div class="ts-sb-pl-row">
         <span class="ts-sb-pl-label-text">Label</span>
-        <input class="ts-sb-pl-input" data-plfield="label" value="${group.label || ''}" placeholder="e.g. Key Level">
+        <input class="ts-sb-pl-input" data-plfield="label" value="${escapeHTMLAttr(group.label || '')}" placeholder="e.g. Key Level">
       </div>
       <div class="ts-sb-pl-row">
         <span class="ts-sb-pl-label-text">Levels</span>
-        <input class="ts-sb-pl-input" data-plfield="levels" value="${levelsStr}" placeholder="21000.50, 21100, 21200">
+        <input class="ts-sb-pl-input" data-plfield="levels" value="${escapeHTMLAttr(levelsStr)}" placeholder="21000.50, 21100, 21200">
       </div>
       <div class="ts-sb-pl-row">
         <span class="ts-sb-pl-label-text">Color</span>

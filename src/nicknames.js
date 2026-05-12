@@ -139,7 +139,7 @@ function detectActiveBrokerFromSwitcher(container) {
 function createPencilBtn() {
   const btn = document.createElement('button');
   btn.className = 'ts-nick-pencil';
-  btn.innerHTML = '&#9998;';  // ✎ pencil
+  btn.textContent = '✎';
   btn.title = 'Set nickname';
   btn.type = 'button';
   return btn;
@@ -288,7 +288,11 @@ function processAccountSwitcherDropdown() {
         if (!dateSpan.dataset.tsOriginalDate) {
           dateSpan.dataset.tsOriginalDate = dateSpan.textContent.trim();
         }
-        dateSpan.innerHTML = `${dateSpan.dataset.tsOriginalDate} <span class="ts-nick-badge">(${storedOriginal})</span>`;
+        dateSpan.textContent = dateSpan.dataset.tsOriginalDate + ' ';
+        const badge = document.createElement('span');
+        badge.className = 'ts-nick-badge';
+        badge.textContent = '(' + storedOriginal + ')';
+        dateSpan.appendChild(badge);
       }
     } else {
       nameSpan.textContent = storedOriginal;
@@ -414,7 +418,14 @@ function updateAccountSwitcherHeader() {
       nickEl.className = 'ts-header-nick';
       nameSpan.after(nickEl);
     }
-    nickEl.innerHTML = `<span class="ts-nick-name">${nick}</span> <span class="ts-nick-badge">(${accountName})</span>`;
+    nickEl.textContent = '';
+    const nameS = document.createElement('span');
+    nameS.className = 'ts-nick-name';
+    nameS.textContent = nick;
+    const badgeS = document.createElement('span');
+    badgeS.className = 'ts-nick-badge';
+    badgeS.textContent = '(' + accountName + ')';
+    nickEl.append(nameS, ' ', badgeS);
     DBG('→ Applied:', nick);
   } else {
     // No nickname — show original span, remove our sibling
@@ -462,7 +473,11 @@ function processAccountCenterTable() {
     // Apply nickname display (in account center: "OriginalName (nickname)")
     const nick = getNickname(activeBroker, storedOriginal);
     if (nick) {
-      nameSpan.innerHTML = `${storedOriginal} <span class="ts-nick-badge">(${nick})</span>`;
+      nameSpan.textContent = storedOriginal + ' ';
+      const nickBadge = document.createElement('span');
+      nickBadge.className = 'ts-nick-badge';
+      nickBadge.textContent = '(' + nick + ')';
+      nameSpan.appendChild(nickBadge);
     } else {
       nameSpan.textContent = storedOriginal;
     }
