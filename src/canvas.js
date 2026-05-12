@@ -921,8 +921,10 @@ function priceToYForScale(price, scale) {
  */
 const _OVERLAY_SELECTOR = [
   '[class*="menuWrap"]', '[class*="contextMenu"]',
+  '[class*="context-menu"]',
   '[data-name="menu"]', '[class*="dialog"]',
   '[class*="popup"]',  '[class*="Modal"]',
+  '[class*="backdrop"]',
   '[role="dialog"]',   '[role="menu"]',
   '[role="listbox"]',
 ].join(',');
