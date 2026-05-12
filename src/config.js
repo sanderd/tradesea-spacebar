@@ -152,23 +152,52 @@ function applyMigrations(cfg) {
 function loadConfig() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(DEFAULT_CONFIG);
-    return applyMigrations(JSON.parse(raw));
+    if (!raw) {
+      const cfg = structuredClone(DEFAULT_CONFIG);
+      precomputeInstruments(cfg);
+      return cfg;
+    }
+    const cfg = applyMigrations(JSON.parse(raw));
+    precomputeInstruments(cfg);
+    return cfg;
   } catch (e) {
     warn('Config load failed, using defaults:', e.message);
-    return structuredClone(DEFAULT_CONFIG);
+    const cfg = structuredClone(DEFAULT_CONFIG);
+    precomputeInstruments(cfg);
+    return cfg;
   }
 }
 
 function saveConfig(cfg) {
   try {
+    precomputeInstruments(cfg);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
     log('Config saved');
   } catch (e) { err('Config save failed:', e.message); }
 }
 
+/**
+ * Pre-parse each price level group's instrument string into a Set
+ * so that per-frame matching in the draw loop avoids repeated regex/split.
+ * The _instruments property is non-enumerable so it won't be serialized.
+ */
+function precomputeInstruments(cfg) {
+  for (const group of (cfg?.priceLevels || [])) {
+    const tokens = (group.instruments || '')
+      .split(/[,;\s]+/)
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    Object.defineProperty(group, '_instruments', {
+      value: tokens,
+      writable: true,
+      configurable: true,
+      enumerable: false,   // won't appear in JSON.stringify
+    });
+  }
+}
+
 export {
   CONFIG, OrderType, Side,
   STORAGE_KEY, CONFIG_VERSION, DEFAULT_CONFIG, MIGRATIONS,
-  applyMigrations, loadConfig, saveConfig,
+  applyMigrations, loadConfig, saveConfig, precomputeInstruments,
 };

@@ -89,13 +89,18 @@ function parsePriceLevels(text) {
   return levels;
 }
 
-/** Get all price level groups matching a specific symbol. */
+/** Get all price level groups matching a specific symbol.
+ *  Uses pre-computed _instruments array (built by precomputeInstruments in config.js)
+ *  to avoid re-parsing instrument strings on every frame.
+ */
 function getMatchingPriceLevelsForSymbol(sym) {
   if (!S.userConfig?.priceLevels?.length || !sym) return [];
   const normSym = sym.replace(/.*:/, '').toUpperCase();
   return S.userConfig.priceLevels.filter(group => {
-    if (!group.instruments || !group.levels?.length) return false;
-    const instruments = group.instruments.split(/[,;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!group.levels?.length) return false;
+    // Prefer pre-computed tokens; fall back to parsing if not yet computed
+    const instruments = group._instruments
+      || (group.instruments || '').split(/[,;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
     return instruments.some(inst => normSym.includes(inst) || inst.includes(normSym));
   });
 }
