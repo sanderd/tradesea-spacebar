@@ -1064,13 +1064,20 @@ function draw() {
 
   // If only price levels are drawn (no crosshair), check if anything changed
   if (hasPriceLevels && !crosshairActive && iframeRect) {
+    // Always keep overlay scanning on schedule (must run even when skipping draw)
+    if (++_overlayRectsTick >= 30) {
+      _overlayRectsTick = 0;
+      _overlayRectsCache = getTvOverlayRects(iframeRect);
+    }
+
     const allPanes = getAllChartPanes();
     // Probe scales to populate coefficient cache (needed for fingerprint)
     for (const { scale } of allPanes) {
       if (scale) _getScaleCoeffs(scale);
     }
-    const fp = _buildPriceLevelFingerprint(allPanes);
-    if (fp === _priceLevelFingerprint && fp !== '' && _overlayRectsTick !== 0) {
+    // Include overlay count in fingerprint so menu open/close triggers redraw
+    const fp = _buildPriceLevelFingerprint(allPanes) + `o${_overlayRectsCache.length}`;
+    if (fp === _priceLevelFingerprint && fp !== '') {
       return; // nothing changed — skip clear + redraw
     }
     _priceLevelFingerprint = fp;
@@ -1083,10 +1090,13 @@ function draw() {
 
   // Always draw price levels (even without spacebar)
   if (iframeRect && hasPriceLevels) {
-    // Refresh overlay rects every ~30 frames (~500ms at 60fps)
-    if (++_overlayRectsTick >= 30) {
-      _overlayRectsTick = 0;
-      _overlayRectsCache = getTvOverlayRects(iframeRect);
+    // Overlay rects already refreshed above in the dirty-check path;
+    // refresh here too for the crosshair-active path
+    if (crosshairActive) {
+      if (++_overlayRectsTick >= 30) {
+        _overlayRectsTick = 0;
+        _overlayRectsCache = getTvOverlayRects(iframeRect);
+      }
     }
     // Mask out any open TradingView menus/dialogs so lines don't cover them
     if (_overlayRectsCache.length > 0) {
