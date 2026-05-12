@@ -9,10 +9,8 @@ import {
 } from './chart.js';
 
 // Module-local caches (not shared state — reset via resetCanvasCaches)
-let _overlayRectsCache = []; // Cached menu/dialog rects (refreshed every ~200ms)
+let _overlayRectsCache = []; // Cached menu/dialog rects (refreshed every ~500ms)
 let _overlayRectsTick = 0;   // Frame counter for throttling overlay rect scanning
-let _paneRectsCache = null;  // { symbol, rects, ts } — cached pane rects (~500ms TTL)
-const _PANE_CACHE_TTL = 500; // ms
 
 // ═══════════════════════════════════════════════════════════════════
 //  2. COORDINATE ↔ PRICE CONVERSION
@@ -816,62 +814,7 @@ function closeSettings() {
 //  5. DRAW LOOP
 // ═══════════════════════════════════════════════════════════════════
 
-// ── Helper: collect all chart pane rects for a given symbol (cached) ─
-function getAllPaneRectsForSymbol(activeSymbol) {
-  const now = performance.now();
-  if (_paneRectsCache
-    && _paneRectsCache.symbol === activeSymbol
-    && (now - _paneRectsCache.ts) < _PANE_CACHE_TTL) {
-    return _paneRectsCache.rects;
-  }
-  const rects = _getAllPaneRectsForSymbolUncached(activeSymbol);
-  _paneRectsCache = { symbol: activeSymbol, rects, ts: now };
-  return rects;
-}
-
-function _getAllPaneRectsForSymbolUncached(activeSymbol) {
-  const results = [];
-  if (!S.iframeWin || !S.iframeDoc) return results;
-
-  const api = getTvApi();
-  if (!api) return results;
-
-  const count = api.chartsCount?.() || 1;
-  const containers = S.iframeDoc.querySelectorAll('.chart-container');
-
-  for (let i = 0; i < count; i++) {
-    try {
-      const chart = api.chart(i);
-      if (!chart) continue;
-      const sym = chart.symbol?.() || chart.symbolExt?.()?.ticker || '';
-      // Normalize: strip exchange prefixes for comparison
-      const normSym = sym.replace(/.*:/, '');
-      const normActive = (activeSymbol || '').replace(/.*:/, '');
-      if (normSym !== normActive) continue;
-
-      // Get this chart's pane canvas rect (iframe-relative)
-      const container = containers[i];
-      if (!container) continue;
-      const wrapper = container.querySelector('.chart-gui-wrapper');
-      const canvasEl = wrapper?.querySelector('canvas') || container.querySelector('canvas');
-      if (!canvasEl) continue;
-
-      // Build a priceScale for this specific chart
-      const panes = chart.getPanes();
-      const scale = panes?.[0]?.getMainSourcePriceScale?.()
-        || panes?.[0]?.getRightPriceScale?.()
-        || panes?.[0]?.getLeftPriceScale?.();
-
-      results.push({
-        paneRect: canvasEl.getBoundingClientRect(),
-        scale,
-      });
-    } catch (e) { /* skip broken chart */ }
-  }
-  return results;
-}
-
-// ── Helper: collect ALL chart panes (every symbol) for price levels ─
+// ── Helper: collect ALL chart panes (every symbol, cached ~500ms) ───
 let _allPanesCache = null;
 const _ALL_PANES_CACHE_TTL = 500;
 
@@ -1116,8 +1059,11 @@ function draw() {
     sellType = 'STOP';
   }
 
-  // Get ALL chart panes showing the same symbol
-  const panes = getAllPaneRectsForSymbol(sym);
+  // Get chart panes matching the active symbol (filter from unified cache)
+  const normSym = sym.replace(/.*:/, '');
+  const panes = getAllChartPanes().filter(p =>
+    p.symbol.replace(/.*:/, '') === normSym
+  );
   if (panes.length === 0) return;
 
   S.ctx.save();
@@ -1228,7 +1174,6 @@ function draw() {
 /** Reset module-local caches — called from teardown in index.js */
 function resetCanvasCaches() {
   _overlayRectsCache = []; _overlayRectsTick = 0;
-  _paneRectsCache = null;
   _allPanesCache = null;
 }
 
