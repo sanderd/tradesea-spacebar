@@ -2,6 +2,18 @@
 
 A Tampermonkey userscript that adds keyboard-driven order placement to TradeSea. Hold spacebar, point at a price on the chart, and click to place orders instantly.
 
+---
+
+- [Features](#features)
+- [Demo video](#demo-video)
+- [Installation](#installation)
+- [Development](#development)
+- [Important Notes](#important-notes)
+- [Security](#security)
+- [Disclaimer](#disclaimer)
+
+---
+
 ## Features
 
 - **Spacebar quick-order mode** -- hold spacebar, left-click to buy, right-click to sell at the pointed price
