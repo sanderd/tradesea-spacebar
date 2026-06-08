@@ -223,13 +223,12 @@ function createSettingsUI() {
   S.settingsBtn.title = 'Spacebar Trading Settings';
   S.settingsBtn.addEventListener('click', openSettings);
 
-  // Insert into the sidebar DOM between Account Center and Logout
-  const sidebarBottom = document.querySelector('aside > div.border-t');
-  const logoutBtn = sidebarBottom?.querySelector('#logout-btn, button[aria-label="Logout"]');
-  if (sidebarBottom && logoutBtn) {
-    sidebarBottom.insertBefore(S.settingsBtn, logoutBtn);
-  } else if (sidebarBottom) {
-    sidebarBottom.appendChild(S.settingsBtn);
+  // Insert into sidebar via platform provider
+  const anchor = S.provider?.findSettingsAnchor?.() || {};
+  if (anchor.parent && anchor.before) {
+    anchor.parent.insertBefore(S.settingsBtn, anchor.before);
+  } else if (anchor.parent) {
+    anchor.parent.appendChild(S.settingsBtn);
   } else {
     // Fallback: fixed position if sidebar not found
     S.settingsBtn.style.cssText = 'position:fixed;bottom:80px;left:12px;width:36px;height:36px;z-index:999998;';
@@ -377,7 +376,7 @@ function openSettings() {
   const ch = cfg.crosshair || DEFAULT_CONFIG.crosshair;
   const chLineHex = ch.lineColor || '#ff00ff';
   const chLs = ch.lineStyle || 'dashed';
-  const settingsTab = `
+  const settingsTabBase = `
     <div class="ts-sb-section-label">Crosshair Visibility</div>
     <div class="ts-sb-pl-row" style="gap:16px;margin-top:8px">
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#aaa">
@@ -444,14 +443,17 @@ function openSettings() {
       <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-lotbg" value="${rgbaToHexAlpha(ch.lotBg || 'rgba(60,60,70,1)').hex}">
       <span style="font-size:10px;color:#555">fg</span>
       <input type="color" class="ts-sb-pl-swatch" id="ts-sb-ch-lotfg" value="${ch.lotFg || '#ffffff'}">
-    </div>
+    </div>`;
 
+    const hasNicknames = S.provider?.hasNicknameSupport !== false;
+    const nicknameSection = hasNicknames ? `
     <div class="ts-sb-section-label" style="margin-top:20px">Account Nicknames</div>
     <div class="ts-sb-subtitle">Custom display names for trading accounts</div>
     <div style="margin-top:8px">
       <button class="ts-sb-io-btn" id="ts-sb-clear-nicknames" style="background:rgba(255,80,80,0.15);color:#ff5050;border-color:rgba(255,80,80,0.3)" title="Remove all account nicknames">✕ Clear All Account Names</button>
       <span id="ts-sb-nick-count" style="font-size:10px;color:#555;margin-left:8px"></span>
-    </div>`;
+    </div>` : '';
+    const settingsTab = settingsTabBase + nicknameSection;
 
   S.settingsOverlay.innerHTML = `
     <div id="ts-sb-panel">

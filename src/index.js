@@ -12,26 +12,7 @@ import {
   onKeyDown, onKeyUp,
   onIframeMouseMove, onIframeMouseDown, onIframeMouseUp, onContextMenu,
 } from './events.js';
-
-function findMainBundleUrl() {
-  const entry = performance.getEntriesByType('resource')
-    .find(e => e.name.includes('/assets/main-') && e.name.endsWith('.js'));
-  return entry ? entry.name : null;
-}
-
-async function discoverServices(mod) {
-  for (const [, val] of Object.entries(mod)) {
-    if (!val || typeof val !== 'object') continue;
-    try { if (!services.tradingService && typeof val.placeOrder === 'function') services.tradingService = val; } catch (e) { }
-    try { if (!services.orderController && typeof val.handlePlaceOrder === 'function') services.orderController = val; } catch (e) { }
-    try { if (!services.accountService && typeof val.getCurrentAccount === 'function') services.accountService = val; } catch (e) { }
-    try { if (!services.symbolService && typeof val.getCurrentSymbol === 'function' && typeof val.getTickSize === 'function') services.symbolService = val; } catch (e) { }
-    try { if (!services.quantityService && typeof val.getQuantity === 'function' && typeof val.setQuantity === 'function') services.quantityService = val; } catch (e) { }
-    try { if (!services.positionService && typeof val.getPositions === 'function' && typeof val.getPositionBySymbol === 'function') services.positionService = val; } catch (e) { }
-    try { if (!services.instrumentService && typeof val.getInstrumentBySymbol === 'function' && typeof val.getSelectedInstrument === 'function') services.instrumentService = val; } catch (e) { }
-  }
-  return !!(services.tradingService && services.accountService);
-}
+import { initProvider } from './platform/provider.js';
 
 function attachEventListeners() {
   // Main window — spacebar (works even when iframe has focus because capture phase)
@@ -91,30 +72,42 @@ function waitForIframe() {
 }
 
 async function init() {
-  log('Initializing v2...');
+  // 0. Detect platform and initialize provider
+  const provider = initProvider();
+  if (!provider) {
+    err('Unknown platform — script disabled');
+    return;
+  }
+  S.provider = provider;
+  log(`Platform: ${provider.name}`);
 
-  // 0. Always start nickname observer (works on both /trade and /account-center)
-  startNicknameObserver();
+  // 1. Nickname observer (only on platforms that need it)
+  if (provider.hasNicknameSupport) {
+    startNicknameObserver();
+  }
 
-  // On /account-center pages, only the nickname feature is needed
-  if (window.location.pathname.includes('account-center')) {
-    log('Account center page — nickname-only mode');
+  // On account-center pages (TradeSea), only nickname feature is needed
+  if (provider.isAccountPage()) {
+    log('Account page — nickname-only mode');
     return;
   }
 
-  // 1. Discover TradeSea services from main bundle
+  // 2. Discover services
+  //    TradeSea: import Vite bundle → scan ES module exports
+  //    ProjectX: walk React fiber tree → find context providers
   let bundleUrl;
   let retries = 0;
   while (!bundleUrl && retries < CONFIG.INIT_MAX_RETRIES) {
-    bundleUrl = findMainBundleUrl();
+    bundleUrl = provider.findBundleUrl();
     if (!bundleUrl) { await new Promise(r => setTimeout(r, CONFIG.INIT_POLL_MS)); retries++; }
   }
   if (!bundleUrl) { err('Bundle not found'); return; }
 
   try {
     const mod = await import(bundleUrl);
-    await discoverServices(mod);
-  } catch (e) { err('Import failed:', e.message); return; }
+    const ok = await provider.discoverServices(mod);
+    if (!ok) { err('Service discovery incomplete'); }
+  } catch (e) { err('Import/discovery failed:', e.message); return; }
 
   if (!services.tradingService || !services.accountService) {
     err('Required services not found');
@@ -131,7 +124,7 @@ async function init() {
     'Controller:', !!services.orderController
   );
 
-  // 2. Wait for TradingView iframe
+  // 3. Wait for TradingView iframe
   try {
     const { iframe, doc, win } = await waitForIframe();
     S.iframeEl = iframe;
@@ -140,18 +133,18 @@ async function init() {
     log('Iframe ready');
   } catch (e) { err(e.message); return; }
 
-  // 3. Load config & create settings UI
+  // 4. Load config & create settings UI
   S.userConfig = loadConfig();
   createSettingsUI();
 
-  // 4. Attach event listeners
+  // 5. Attach event listeners
   attachEventListeners();
 
-  // 5. Create canvas overlay + start draw loop (always on, for price levels)
+  // 6. Create canvas overlay + start draw loop (always on, for price levels)
   ensureCanvas();
   S.rafId = requestAnimationFrame(draw);
 
-  // 6. Expose API
+  // 7. Expose API
   window.tsSpacebar = {
     get active() { return S.spaceHeld; },
     get price() { return S.mousePrice; },
@@ -161,18 +154,22 @@ async function init() {
     set qty(n) { services.orderController?.setQuantity(n); },
     get tickSize() { return getTickSize(); },
     get ready() { return !!(services.tradingService && services.accountService && S.iframeDoc); },
+    get platform() { return provider.id; },
     destroy() { teardown(); delete window.tsSpacebar; log('Destroyed'); },
+    // Debug: scan all bundle exports (useful for discovering service signatures)
+    probeExports: provider.probeExports ? () => provider.probeExports() : undefined,
   };
 
-  const acct = services.accountService.getCurrentAccount();
+  const acct = provider.getCurrentAccount();
   log('✅ Ready!');
-  log('  Account:', acct?.propFirmDisplayName || acct?.name);
+  log('  Platform:', provider.name);
+  log('  Account:', provider.getAccountDisplayName(acct));
   log('  Tick size:', getTickSize());
   log('  Hold SPACEBAR over chart, then:');
   log('    Left-click  → BUY  (limit below market, stop above)');
   log('    Right-click → SELL (limit above market, stop below)');
 
-  // 7. Start iframe watchdog (handles FundedSeat account switching)
+  // 8. Start iframe watchdog (handles account switching)
   startIframeWatchdog();
 }
 
@@ -181,7 +178,7 @@ async function init() {
 // ═══════════════════════════════════════════════════════════════════
 function teardown() {
   stopIframeWatchdog();
-  stopNicknameObserver();
+  if (S.provider?.hasNicknameSupport) stopNicknameObserver();
   S.cleanupFns.forEach(fn => { try { fn(); } catch (_) {} });
   S.cleanupFns = [];
   if (S.rafId) { cancelAnimationFrame(S.rafId); S.rafId = null; }
@@ -245,7 +242,7 @@ async function reinitialize() {
 
   try {
     teardown();
-    // Small delay to let Angular re-bootstrap
+    // Small delay to let the framework re-bootstrap
     await new Promise(r => setTimeout(r, 1500));
     await init();
   } catch (e) {
