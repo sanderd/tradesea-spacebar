@@ -95,6 +95,8 @@ async function init() {
   // 2. Discover services
   //    TradeSea: import Vite bundle → scan ES module exports
   //    ProjectX: walk React fiber tree → find context providers
+  //    ProjectX may show an environment picker before bootstrapping,
+  //    so we retry until the fiber tree is populated.
   let bundleUrl;
   let retries = 0;
   while (!bundleUrl && retries < CONFIG.INIT_MAX_RETRIES) {
@@ -103,16 +105,52 @@ async function init() {
   }
   if (!bundleUrl) { err('Bundle not found'); return; }
 
-  try {
-    const mod = await import(bundleUrl);
-    const ok = await provider.discoverServices(mod);
-    if (!ok) { err('Service discovery incomplete'); }
-  } catch (e) { err('Import/discovery failed:', e.message); return; }
+  let mod;
+  try { mod = await import(bundleUrl); }
+  catch (e) { err('Import failed:', e.message); return; }
+
+  // Retry discovery — fiber tree may not be ready yet (e.g. TopStepX environment picker).
+  // When accountCtx is found but orderCtx isn't, we're on the environment selector screen —
+  // keep waiting indefinitely (user hasn't clicked LAUNCH SIM/LIVE yet).
+  retries = 0;
+  let discoveryOk = false;
+  let envPickerLogged = false;
+  while (!discoveryOk) {
+    try { discoveryOk = await provider.discoverServices(mod, { silent: true }); }
+    catch (_) {}
+
+    if (discoveryOk) break;
+
+    // Detect environment picker: accountService set but tradingService missing
+    const waitingForEnvPick = !!services.accountService && !services.tradingService;
+    if (waitingForEnvPick) {
+      if (!envPickerLogged) {
+        log('Waiting for environment selection (LAUNCH SIM / LAUNCH LIVE)...');
+        envPickerLogged = true;
+      }
+      // Longer interval while waiting for user action
+      await new Promise(r => setTimeout(r, 2000));
+      retries++;
+      continue;
+    }
+
+    // Normal retry (app not yet bootstrapped)
+    if (retries >= CONFIG.INIT_MAX_RETRIES) break;
+    await new Promise(r => setTimeout(r, CONFIG.INIT_POLL_MS));
+    retries++;
+  }
+
+  if (!discoveryOk) {
+    // One final loud attempt for diagnostic logging
+    try { await provider.discoverServices(mod); } catch (_) {}
+  }
 
   if (!services.tradingService || !services.accountService) {
-    err('Required services not found');
+    err('Required services not found (after', retries, 'retries)');
     return;
   }
+
+  if (retries > 0) log(`Service discovery completed after ${retries} retries`);
 
   log('Services:',
     'Trading:', !!services.tradingService,

@@ -84,9 +84,9 @@ function createProjectxProvider() {
     },
 
     // ── Service discovery via React fiber tree ────────────────
-    discoverServices(_mod) {
+    discoverServices(_mod, { silent = false } = {}) {
       const root = _getFiberRoot();
-      if (!root) { warn('React fiber root not found'); return false; }
+      if (!root) { if (!silent) warn('React fiber root not found'); return false; }
 
       const found = {};
       _walkFiber(root, (fiber) => {
@@ -96,7 +96,7 @@ function createProjectxProvider() {
 
         for (const [name, matcher] of Object.entries(CONTEXT_MATCHERS)) {
           if (!found[name]) {
-            try { if (matcher(val)) { found[name] = val; log(`Fiber: ${name} found`); } }
+            try { if (matcher(val)) { found[name] = val; if (!silent) log(`Fiber: ${name} found`); } }
             catch (_) {}
           }
         }
