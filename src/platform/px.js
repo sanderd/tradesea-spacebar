@@ -206,6 +206,9 @@ function createPxProvider() {
     orderSource: 'WEB',
     locale: 'en-US',
 
+    /** Whether a position side value represents a long (buy). */
+    isLongSide(side) { return side === 0; },
+
     resolveOrderType(side, price, ltp) {
       if (ltp == null) return side === 'buy' ? 1 : 4;
       if (side === 'buy') return price < ltp ? 1 : 4;

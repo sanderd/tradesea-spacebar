@@ -41,6 +41,9 @@ function createTradeseaProvider() {
     orderSource: 'ORDER_PAD',
     locale: 'en-US',
 
+    /** Whether a position side value represents a long (buy). */
+    isLongSide(side) { return side === TS_SIDE.Buy; },
+
     /** Determine limit vs stop based on side + price vs LTP. */
     resolveOrderType(side, price, ltp) {
       if (ltp == null) return side === 'buy' ? TS_ORDER_TYPE.Limit : TS_ORDER_TYPE.Stop;

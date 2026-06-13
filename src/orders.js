@@ -38,7 +38,7 @@ async function moveStopToBreakeven() {
   }
 
   // Round avgPrice to nearest tick on the safe side
-  const isLong = pos.side === 1 || pos.side === 0; // TradeSea Buy=1, PX Buy=0
+  const isLong = provider.isLongSide(pos.side);
   const bePrice = isLong
     ? Math.ceil(pos.avgPrice / minTick) * minTick   // round UP for longs
     : Math.floor(pos.avgPrice / minTick) * minTick;  // round DOWN for shorts
