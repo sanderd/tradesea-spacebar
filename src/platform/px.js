@@ -79,8 +79,6 @@ function createPxProvider() {
     // ── Version compatibility ─────────────────────────────────
     // Last known working version at time of writing.
     knownVersion: '2.2.19.1',
-    // All 2.2.x.x versions are considered compatible — no warning.
-    compatPrefix: '2.2.',
 
     /** Detect the running app version. Sentry release (build-time) → DOM fallback. */
     getAppVersion() {
