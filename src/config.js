@@ -1,6 +1,7 @@
 // ─── Configuration & Persistence ────────────────────────────────────
 // Constants, default config, schema migrations, load/save.
 import { log, warn, err } from './logging.js';
+import { S } from './state.js';
 
 // ─── Configuration ──────────────────────────────────────────────────
 const CONFIG = {
@@ -20,7 +21,12 @@ const CONFIG = {
   DEBUG: true,
 };
 
-// ─── Enums ──────────────────────────────────────────────────────────
+// ─── Enums (provider-aware) ─────────────────────────────────────────
+// These read from the active platform provider so consumers don't
+// need to import the provider module directly.
+function getOrderType() { return S.provider?.OrderType ?? { Limit: 1, Market: 2, Stop: 3, StopLimit: 4 }; }
+function getSide() { return S.provider?.Side ?? { Buy: 1, Sell: -1 }; }
+// Backward-compatible constants (TradeSea defaults, used at parse time)
 const OrderType = { Limit: 1, Market: 2, Stop: 3, StopLimit: 4 };
 const Side = { Buy: 1, Sell: -1 };
 

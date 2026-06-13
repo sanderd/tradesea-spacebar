@@ -49,8 +49,8 @@ function onKeyDown(e) {
     || e.target?.isContentEditable;
   if (editable) return;
 
-  // Break-even hotkey — always active (no spacebar required)
-  if (S.userConfig?.breakevenHotkey && e.code === S.userConfig.breakevenHotkey) {
+  // Break-even hotkey — only on platforms without native breakeven
+  if (S.provider?.hasBreakevenSupport && S.userConfig?.breakevenHotkey && e.code === S.userConfig.breakevenHotkey) {
     e.preventDefault();
     e.stopPropagation();
     moveStopToBreakeven();

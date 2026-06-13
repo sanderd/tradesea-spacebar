@@ -15,11 +15,13 @@ export const services = {
 };
 
 export const S = {
+  provider: null,       // Active platform provider (tradesea or px)
   spaceHeld: false,
   mouseY: null,
   mousePrice: null,
   lastIframeMouseX: null,
   lastIframeMouseY: null,
+  hoveredChartSymbol: null, // TV contractName of the pane the mouse is currently over
   canvas: null,
   ctx: null,
   rafId: null,
