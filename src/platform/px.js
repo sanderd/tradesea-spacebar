@@ -76,6 +76,29 @@ function createPxProvider() {
     id: 'px',
     name: 'PX',
 
+    // ── Version compatibility ─────────────────────────────────
+    // Last known working version at time of writing.
+    knownVersion: '2.2.19.1',
+    // All 2.2.x.x versions are considered compatible — no warning.
+    compatPrefix: '2.2.',
+
+    /** Detect the running app version. Sentry release (build-time) → DOM fallback. */
+    getAppVersion() {
+      try {
+        const v = window.__SENTRY__?.hub?.getClient?.()?.getOptions?.()?.release;
+        if (v && /^\d+\.\d+/.test(v)) return v;
+      } catch (_) {}
+      try {
+        const node = document.evaluate(
+          "//div[contains(text(),'Version:')]",
+          document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+        ).singleNodeValue;
+        const m = node?.textContent?.match(/([\d.]+)/);
+        if (m) return m[1];
+      } catch (_) {}
+      return null;
+    },
+
     // ── Bundle discovery ──────────────────────────────────────
     findBundleUrl() {
       const entry = performance.getEntriesByType('resource')

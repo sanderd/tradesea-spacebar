@@ -13,6 +13,7 @@ import {
   onIframeMouseMove, onIframeMouseDown, onIframeMouseUp, onContextMenu,
 } from './events.js';
 import { initProvider } from './platform/provider.js';
+import { checkPlatformVersion } from './version.js';
 
 function attachEventListeners() {
   // Main window — spacebar (works even when iframe has focus because capture phase)
@@ -161,6 +162,9 @@ async function init() {
     'Instrument:', !!services.instrumentService,
     'Controller:', !!services.orderController
   );
+
+  // Version compatibility check (PX only — TradeSea has no version indicator)
+  checkPlatformVersion();
 
   // 3. Wait for TradingView iframe
   try {
