@@ -16,12 +16,16 @@ import { services } from '../state.js';
 
 // ─── Fiber walking utilities ────────────────────────────────────────
 
-/** Get the React container fiber root from #root. */
+/** Get the CURRENT React fiber tree root from #root. */
 function _getFiberRoot() {
   const rootEl = document.getElementById('root');
   if (!rootEl) return null;
   const key = Object.keys(rootEl).find(k => k.startsWith('__reactContainer$'));
-  return key ? rootEl[key] : null;
+  if (!key) return null;
+  const fiber = rootEl[key];
+  // __reactContainer$ is set once at mount — always the same reference.
+  // FiberRootNode.current is the actual current tree root, swapped on each commit.
+  return fiber?.stateNode?.current || fiber;
 }
 
 /**
@@ -173,19 +177,39 @@ function createPxProvider() {
     },
 
     /**
-     * Read the LIVE context value from a stored fiber reference.
-     * React alternates between two fiber trees on each commit.
-     * By comparing the current root to our stored root, we know if
-     * our fibers are still "current" or have become "alternate".
+     * Read a LIVE context value from the current React fiber tree.
+     * _getFiberRoot() returns stateNode.current which swaps on each commit.
+     * If the root changed since our last walk, we re-walk to pick up fresh fibers.
+     * Between swaps, reads are O(1) — just a ref comparison + property access.
      */
     _readCtx(name) {
-      const fiber = this._fibers?.[name];
-      if (!fiber) return this._ctx?.[name] || null;
-      // O(1) check: has the root fiber swapped since we stored our refs?
+      // Detect tree swap — _getFiberRoot() now returns stateNode.current
       const currentRoot = _getFiberRoot();
-      const swapped = currentRoot && this._rootFiber && currentRoot !== this._rootFiber;
-      const target = (swapped && fiber.alternate) ? fiber.alternate : fiber;
-      return target.memoizedProps?.value || null;
+      if (currentRoot && currentRoot !== this._rootFiber) {
+        this._syncFibers(currentRoot);
+      }
+      return this._fibers?.[name]?.memoizedProps?.value || null;
+    },
+
+    /** Re-walk the current tree to sync fiber refs after a tree swap. */
+    _syncFibers(root) {
+      const found = {};
+      const fibers = {};
+      _walkFiber(root, (fiber) => {
+        if (!_isProvider(fiber)) return false;
+        const val = fiber.memoizedProps?.value;
+        if (!val || typeof val !== 'object') return false;
+        for (const [name, matcher] of Object.entries(CONTEXT_MATCHERS)) {
+          if (!found[name]) {
+            try { if (matcher(val)) { found[name] = val; fibers[name] = fiber; } }
+            catch (_) {}
+          }
+        }
+        return Object.keys(found).length === Object.keys(CONTEXT_MATCHERS).length;
+      });
+      this._ctx = found;
+      this._fibers = fibers;
+      this._rootFiber = root;
     },
 
     /** Re-read live context values from the fiber tree. */
