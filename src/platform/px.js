@@ -114,8 +114,10 @@ function createPxProvider() {
       // React context values are immutable — when state changes (e.g. orderAmount),
       // React creates a NEW value object. Reading from the fiber's memoizedProps
       // always gives the latest committed value.
+      // We also store the root fiber to detect tree swaps (React's dual-tree).
       this._ctx = found;
       this._fibers = fibers;
+      this._rootFiber = root;
 
       // Map to the shared services shape used by chart.js / orders.js.
       // Adapters use _readCtx() to get LIVE values from fiber refs.
@@ -151,19 +153,18 @@ function createPxProvider() {
 
     /**
      * Read the LIVE context value from a stored fiber reference.
-     * React's dual-tree architecture means our fiber may become the "alternate"
-     * after a commit — check both the fiber and its alternate to find the
-     * current value.
+     * React alternates between two fiber trees on each commit.
+     * By comparing the current root to our stored root, we know if
+     * our fibers are still "current" or have become "alternate".
      */
     _readCtx(name) {
       const fiber = this._fibers?.[name];
       if (!fiber) return this._ctx?.[name] || null;
-      // Prefer the fiber's own props; fall back to alternate (post-commit swap)
-      const val = fiber.memoizedProps?.value;
-      const alt = fiber.alternate?.memoizedProps?.value;
-      // Return whichever has a value — React keeps the "current" tree's
-      // memoizedProps up to date after commit
-      return val || alt || this._ctx?.[name] || null;
+      // O(1) check: has the root fiber swapped since we stored our refs?
+      const currentRoot = _getFiberRoot();
+      const swapped = currentRoot && this._rootFiber && currentRoot !== this._rootFiber;
+      const target = (swapped && fiber.alternate) ? fiber.alternate : fiber;
+      return target.memoizedProps?.value || null;
     },
 
     /** Re-read live context values from the fiber tree. */
@@ -186,6 +187,7 @@ function createPxProvider() {
       });
       this._ctx = found;
       this._fibers = fibers;
+      this._rootFiber = root;
       // Update direct service refs
       if (found.orderCtx) {
         services.tradingService = found.orderCtx;
