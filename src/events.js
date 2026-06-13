@@ -89,10 +89,6 @@ function onIframeMouseMove(e) {
   S.lastIframeMouseX = e.clientX;
   S.lastIframeMouseY = e.clientY;
 
-  // Always update hoveredChartSymbol — getPaneCanvasRect() reads .chart-container.active
-  // which TV updates on hover. This keeps the symbol fresh for both spacebar and click orders.
-  getPaneCanvasRect();
-
   if (!S.spaceHeld) return;
   resolveMousePrice();
 }

@@ -154,30 +154,46 @@ function createPxProvider() {
 
       // symbolService adapter: chart.js expects getCurrentSymbol(), getTickSize(), getCurrentPrice()
       services.symbolService = {
+        // Returns the TV contractName (e.g. 'GCQ26') of the active chart.
+        // Using contractName rather than productId means the canvas pane filter
+        // can directly compare TV-symbol to TV-symbol without any mapping.
+        // placeOrder() is responsible for converting contractName → productId.
         getCurrentSymbol() {
-          // S.hoveredChartSymbol is set by getPaneCanvasRect() using .chart-container.active,
-          // which TV updates on hover — not just click. This gives correct multi-chart support.
-          // Falls back to activeChart() (click-driven) if hover symbol isn't available yet.
           try {
-            const tvSym = S.hoveredChartSymbol
-              || S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
-            if (tvSym) {
-              const cc = self._readCtx('contractCtx');
-              const prod = cc?.getContractByContractName?.(tvSym)?.productId;
-              if (prod) return prod;
-            }
+            return S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.() || null;
           } catch (_) {}
-          // Final fallback: domDataCtx productId (last-traded instrument)
-          return self._readCtx('domDataCtx')?.contract?.productId || null;
+          return null;
         },
         getTickSize() {
+          // Read tick size from contractCtx for the active chart's instrument.
+          try {
+            const tvSym = S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
+            if (tvSym) {
+              const tick = self._readCtx('contractCtx')?.getContractByContractName?.(tvSym)?.tickSize;
+              if (tick) return tick;
+            }
+          } catch (_) {}
           const dom = self._readCtx('domDataCtx');
           return dom?.tick || dom?.contract?.tickSize || null;
         },
         getCurrentPrice() {
-          return self._readCtx('domDataCtx')?.lastPrice || null;
+          // Return LTP only when domDataCtx matches the active TV chart.
+          // If they differ (different instruments), return null — resolveOrderType
+          // will safely default to LIMIT.
+          try {
+            const tvSym = S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
+            const dom = self._readCtx('domDataCtx');
+            if (tvSym && dom?.contract?.contractName === tvSym) return dom?.lastPrice || null;
+          } catch (_) {}
+          return null;
         },
-        _getContract() { return self._readCtx('domDataCtx')?.contract; },
+        _getContract() {
+          try {
+            const tvSym = S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
+            if (tvSym) return self._readCtx('contractCtx')?.getContractByContractName?.(tvSym) || null;
+          } catch (_) {}
+          return self._readCtx('domDataCtx')?.contract || null;
+        },
       };
 
       // quantityService adapter: chart.js expects getQuantity(), setQuantity(n)
@@ -291,13 +307,14 @@ function createPxProvider() {
       const ctx = this._readCtx('orderCtx');
       if (!ctx?.placeOrderWithSymbol) { err('orderCtx.placeOrderWithSymbol not found'); return null; }
 
-      // Enrich with contractId and productId from the DOM data context.
-      // Always override symbol — getActiveSymbol() may return a TV chart name
-      // like "MNQU26" but placeOrderWithSymbol needs the productId "F.US.MNQ".
-      const domCtx = this._readCtx('domDataCtx');
-      if (domCtx?.contract) {
-        order.contractId = domCtx.contract.contractId;
-        order.symbol = domCtx.contract.productId;
+      // order.symbol is the TV contractName (e.g. 'GCQ26') from getActiveSymbol().
+      // Resolve it to productId + contractId via contractCtx.
+      const cc = this._readCtx('contractCtx');
+      const contract = cc?.getContractByContractName?.(order.symbol)
+        || cc?.getContractByProductId?.(order.symbol); // fallback if already a productId
+      if (contract) {
+        order.symbol = contract.productId;
+        order.contractId = contract.contractId;
       }
 
       // placeOrderWithSymbol takes a single object arg:
