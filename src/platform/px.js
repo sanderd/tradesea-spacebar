@@ -1,4 +1,4 @@
-// ─── ProjectX (TopStepX) Platform Provider ──────────────────────────
+// ─── PX Platform Provider ───────────────────────────────────────────
 // Service discovery via React fiber tree traversal.
 // Instead of duck-typing ES module exports (TradeSea/Svelte approach),
 // we walk the React component tree to find Context Providers whose
@@ -71,10 +71,10 @@ const CONTEXT_MATCHERS = {
 
 // ─── Provider factory ───────────────────────────────────────────────
 
-function createProjectxProvider() {
+function createPxProvider() {
   return {
-    id: 'projectx',
-    name: 'ProjectX',
+    id: 'px',
+    name: 'PX',
 
     // ── Bundle discovery ──────────────────────────────────────
     findBundleUrl() {
@@ -164,7 +164,7 @@ function createProjectxProvider() {
     },
 
     // ── Order formatting ──────────────────────────────────────
-    // Enum values match the ProjectX internal enums.
+    // Enum values match the PX internal enums.
     // Confusing naming in their codebase:
     //   ye.type      = order type (rt.Limit=1, rt.Stop=4)
     //   ye.orderType = side       (mr.Buy=0,   mr.Sell=1)
@@ -197,11 +197,13 @@ function createProjectxProvider() {
       const ctx = this._ctx?.orderCtx;
       if (!ctx?.placeOrderWithSymbol) { err('orderCtx.placeOrderWithSymbol not found'); return null; }
 
-      // Enrich with contractId from the DOM data context
+      // Enrich with contractId and productId from the DOM data context.
+      // Always override symbol — getActiveSymbol() may return a TV chart name
+      // like "MNQU26" but placeOrderWithSymbol needs the productId "F.US.MNQ".
       const domCtx = this._ctx?.domDataCtx;
-      if (domCtx?.contract?.contractId) {
+      if (domCtx?.contract) {
         order.contractId = domCtx.contract.contractId;
-        if (!order.symbol) order.symbol = domCtx.contract.productId;
+        order.symbol = domCtx.contract.productId;
       }
 
       // placeOrderWithSymbol takes a single object arg:
@@ -217,7 +219,7 @@ function createProjectxProvider() {
       if (typeof ctx.editOrder === 'function') {
         return ctx.editOrder(positionId, brackets);
       }
-      warn('editPositionBrackets not supported on ProjectX via fiber');
+      warn('editPositionBrackets not supported on PX via fiber');
       return null;
     },
 
@@ -240,7 +242,7 @@ function createProjectxProvider() {
 
     // ── UI integration ────────────────────────────────────────
     findSettingsAnchor() {
-      // TopStepX uses MUI — sidebar is a MuiStack with icon buttons
+      // PX uses MUI — sidebar is a MuiStack with icon buttons
       // Try to find the sidebar navigation stack
       const sidebar = document.querySelector('.MuiStack-root[class*="css-1lzh2bj"]')
         || document.querySelector('nav')
@@ -259,10 +261,10 @@ function createProjectxProvider() {
     },
 
     isAccountPage() {
-      return false; // TopStepX doesn't have a separate account page
+      return false; // PX doesn't have a separate account page
     },
 
-    /** TopStepX has native account naming — skip nickname feature. */
+    /** PX has native account naming — skip nickname feature. */
     hasNicknameSupport: false,
 
     logTag: 'PX-Spacebar',
@@ -281,4 +283,4 @@ function createProjectxProvider() {
   };
 }
 
-export { createProjectxProvider };
+export { createPxProvider };

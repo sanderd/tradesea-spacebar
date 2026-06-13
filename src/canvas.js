@@ -1193,10 +1193,16 @@ function draw() {
   }
 
   // Get chart panes matching the active symbol (filter from unified cache)
-  const normSym = sym.replace(/.*:/, '');
-  const panes = getAllChartPanes().filter(p =>
-    p.symbol.replace(/.*:/, '') === normSym
-  );
+  // Symbol formats vary across platforms:
+  //   TradeSea:  "CME:MNQ"   → stripped: "MNQ"
+  //   PX:        "F.US.MNQ"  → base: "MNQ"
+  //   TV chart:  "MNQU26"    → starts with "MNQ"
+  const normSym = sym.replace(/.*:/, '').toUpperCase();
+  const baseSym = normSym.includes('.') ? normSym.split('.').pop() : normSym;
+  const panes = getAllChartPanes().filter(p => {
+    const ps = p.symbol.replace(/.*:/, '').toUpperCase();
+    return ps === normSym || ps.startsWith(baseSym) || baseSym.startsWith(ps);
+  });
   if (panes.length === 0) return;
 
   S.ctx.save();

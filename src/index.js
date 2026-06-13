@@ -94,8 +94,8 @@ async function init() {
 
   // 2. Discover services
   //    TradeSea: import Vite bundle → scan ES module exports
-  //    ProjectX: walk React fiber tree → find context providers
-  //    ProjectX may show an environment picker before bootstrapping,
+  //    PX:       walk React fiber tree → find context providers
+  //    PX may show an environment picker before bootstrapping,
   //    so we retry until the fiber tree is populated.
   let bundleUrl;
   let retries = 0;
@@ -109,7 +109,7 @@ async function init() {
   try { mod = await import(bundleUrl); }
   catch (e) { err('Import failed:', e.message); return; }
 
-  // Retry discovery — fiber tree may not be ready yet (e.g. TopStepX environment picker).
+  // Retry discovery — fiber tree may not be ready yet (e.g. PX environment picker).
   // When accountCtx is found but orderCtx isn't, we're on the environment selector screen —
   // keep waiting indefinitely (user hasn't clicked LAUNCH SIM/LIVE yet).
   retries = 0;

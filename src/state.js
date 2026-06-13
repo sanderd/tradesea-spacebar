@@ -15,7 +15,7 @@ export const services = {
 };
 
 export const S = {
-  provider: null,       // Active platform provider (tradesea or projectx)
+  provider: null,       // Active platform provider (tradesea or px)
   spaceHeld: false,
   mouseY: null,
   mousePrice: null,

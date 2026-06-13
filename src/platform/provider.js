@@ -4,11 +4,11 @@
 
 import { PLATFORMS, detectPlatform } from './detect.js';
 import { createTradeseaProvider } from './tradesea.js';
-import { createProjectxProvider } from './projectx.js';
+import { createPxProvider } from './px.js';
 
 const _providers = {
   [PLATFORMS.TRADESEA]: createTradeseaProvider,
-  [PLATFORMS.PROJECTX]: createProjectxProvider,
+  [PLATFORMS.PX]: createPxProvider,
 };
 
 /** Active provider instance (set once during init). */

@@ -3,17 +3,17 @@
 
 const PLATFORMS = {
   TRADESEA: 'tradesea',
-  PROJECTX: 'projectx',
+  PX: 'px',
 };
 
 /**
  * Detect the current platform from the page hostname.
- * @returns {'tradesea'|'projectx'|null}
+ * @returns {'tradesea'|'px'|null}
  */
 function detectPlatform() {
   const host = window.location.hostname;
   if (host.includes('tradesea.ai')) return PLATFORMS.TRADESEA;
-  if (host.includes('topstepx.com')) return PLATFORMS.PROJECTX;
+  if (host.includes('topstepx.com')) return PLATFORMS.PX;
   return null;
 }
 
