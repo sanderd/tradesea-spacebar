@@ -12,7 +12,7 @@
 //   • WebSocket context — has subscribeDom, subscribeOrders, subscribePositions
 
 import { log, warn, err } from '../logging.js';
-import { services } from '../state.js';
+import { services, S } from '../state.js';
 
 // ─── Fiber walking utilities ────────────────────────────────────────
 
