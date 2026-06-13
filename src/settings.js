@@ -349,14 +349,14 @@ function openSettings() {
     <div class="ts-sb-section-label">Contract Sizes</div>
     <div class="ts-sb-subtitle">Press hotkey to switch size instantly</div>
     ${hotkeyRows}
-    <div class="ts-sb-section-label" style="margin-top:18px">Actions</div>
+    ${S.provider?.hasBreakevenSupport ? `<div class="ts-sb-section-label" style="margin-top:18px">Actions</div>
     <div class="ts-sb-row">
       <span class="slot-label" style="width:auto;min-width:80px">Break-even</span>
       <input type="text" class="ts-sb-hk" id="ts-sb-be-hk" data-code="${cfg.breakevenHotkey || ''}"
              value="${formatKeyDisplay(cfg.breakevenHotkey)}" placeholder="Click \u2192 press key" readonly>
       <button class="ts-sb-clear" id="ts-sb-be-clear" title="Clear hotkey">\u2715</button>
       <span class="ts-sb-lots">Move SL to avg entry</span>
-    </div>
+    </div>` : ''}
     <div class="ts-sb-section-label" style="margin-top:18px">Options</div>
     <div class="ts-sb-row" style="margin-top:8px">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;color:#aaa">

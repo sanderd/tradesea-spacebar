@@ -89,6 +89,7 @@ function createPxProvider() {
       if (!root) { if (!silent) warn('React fiber root not found'); return false; }
 
       const found = {};
+      const fibers = {};
       _walkFiber(root, (fiber) => {
         if (!_isProvider(fiber)) return false;
         const val = fiber.memoizedProps?.value;
@@ -96,20 +97,28 @@ function createPxProvider() {
 
         for (const [name, matcher] of Object.entries(CONTEXT_MATCHERS)) {
           if (!found[name]) {
-            try { if (matcher(val)) { found[name] = val; if (!silent) log(`Fiber: ${name} found`); } }
-            catch (_) {}
+            try {
+              if (matcher(val)) {
+                found[name] = val;
+                fibers[name] = fiber;  // Store fiber ref for live reads
+                if (!silent) log(`Fiber: ${name} found`);
+              }
+            } catch (_) {}
           }
         }
         // Early exit if we found everything
         return Object.keys(found).length === Object.keys(CONTEXT_MATCHERS).length;
       });
 
-      // Also keep the raw contexts for provider-specific access
+      // Keep raw contexts + fiber refs for live access.
+      // React context values are immutable — when state changes (e.g. orderAmount),
+      // React creates a NEW value object. Reading from the fiber's memoizedProps
+      // always gives the latest committed value.
       this._ctx = found;
+      this._fibers = fibers;
 
       // Map to the shared services shape used by chart.js / orders.js.
-      // Adapters bridge ProjectX context shapes → TradeSea-style method names.
-      // They close over `self` so _refreshContexts() updates propagate automatically.
+      // Adapters use _readCtx() to get LIVE values from fiber refs.
       const self = this;
       services.tradingService = found.orderCtx || null;
       services.accountService = found.accountCtx || null;
@@ -118,26 +127,43 @@ function createPxProvider() {
       // symbolService adapter: chart.js expects getCurrentSymbol(), getTickSize(), getCurrentPrice()
       services.symbolService = {
         getCurrentSymbol() {
-          const dom = self._ctx?.domDataCtx;
+          const dom = self._readCtx('domDataCtx');
           return dom?.contract?.productId || null;
         },
         getTickSize() {
-          const dom = self._ctx?.domDataCtx;
+          const dom = self._readCtx('domDataCtx');
           return dom?.tick || dom?.contract?.tickSize || null;
         },
         getCurrentPrice() {
-          return self._ctx?.domDataCtx?.lastPrice || null;
+          return self._readCtx('domDataCtx')?.lastPrice || null;
         },
-        _getContract() { return self._ctx?.domDataCtx?.contract; },
+        _getContract() { return self._readCtx('domDataCtx')?.contract; },
       };
 
       // quantityService adapter: chart.js expects getQuantity(), setQuantity(n)
       services.quantityService = {
-        getQuantity() { return self._ctx?.domDataCtx?.orderAmount || 1; },
-        setQuantity(n) { self._ctx?.domDataCtx?.updateOrderAmount?.(n); },
+        getQuantity() { return self._readCtx('domDataCtx')?.orderAmount || 1; },
+        setQuantity(n) { self._readCtx('domDataCtx')?.updateOrderAmount?.(n); },
       };
 
       return !!(found.orderCtx && found.accountCtx);
+    },
+
+    /**
+     * Read the LIVE context value from a stored fiber reference.
+     * React's dual-tree architecture means our fiber may become the "alternate"
+     * after a commit — check both the fiber and its alternate to find the
+     * current value.
+     */
+    _readCtx(name) {
+      const fiber = this._fibers?.[name];
+      if (!fiber) return this._ctx?.[name] || null;
+      // Prefer the fiber's own props; fall back to alternate (post-commit swap)
+      const val = fiber.memoizedProps?.value;
+      const alt = fiber.alternate?.memoizedProps?.value;
+      // Return whichever has a value — React keeps the "current" tree's
+      // memoizedProps up to date after commit
+      return val || alt || this._ctx?.[name] || null;
     },
 
     /** Re-read live context values from the fiber tree. */
@@ -145,17 +171,22 @@ function createPxProvider() {
       const root = _getFiberRoot();
       if (!root) return;
       const found = {};
+      const fibers = {};
       _walkFiber(root, (fiber) => {
         if (!_isProvider(fiber)) return false;
         const val = fiber.memoizedProps?.value;
         if (!val || typeof val !== 'object') return false;
         for (const [name, matcher] of Object.entries(CONTEXT_MATCHERS)) {
-          if (!found[name]) { try { if (matcher(val)) found[name] = val; } catch (_) {} }
+          if (!found[name]) {
+            try { if (matcher(val)) { found[name] = val; fibers[name] = fiber; } }
+            catch (_) {}
+          }
         }
         return Object.keys(found).length === Object.keys(CONTEXT_MATCHERS).length;
       });
       this._ctx = found;
-      // Update direct service refs (adapters close over found.domDataCtx so they're live)
+      this._fibers = fibers;
+      // Update direct service refs
       if (found.orderCtx) {
         services.tradingService = found.orderCtx;
         services.positionService = found.orderCtx;
@@ -194,13 +225,13 @@ function createPxProvider() {
 
     async placeOrder(order, _accountId) {
       this._refreshContexts();
-      const ctx = this._ctx?.orderCtx;
+      const ctx = this._readCtx('orderCtx');
       if (!ctx?.placeOrderWithSymbol) { err('orderCtx.placeOrderWithSymbol not found'); return null; }
 
       // Enrich with contractId and productId from the DOM data context.
       // Always override symbol — getActiveSymbol() may return a TV chart name
       // like "MNQU26" but placeOrderWithSymbol needs the productId "F.US.MNQ".
-      const domCtx = this._ctx?.domDataCtx;
+      const domCtx = this._readCtx('domDataCtx');
       if (domCtx?.contract) {
         order.contractId = domCtx.contract.contractId;
         order.symbol = domCtx.contract.productId;
@@ -213,7 +244,7 @@ function createPxProvider() {
 
     async editPositionBrackets(positionId, brackets, _accountId) {
       this._refreshContexts();
-      const ctx = this._ctx?.orderCtx;
+      const ctx = this._readCtx('orderCtx');
       if (!ctx) { warn('editPositionBrackets: orderCtx not found'); return null; }
       // Use editOrder or editSltpSetting if available
       if (typeof ctx.editOrder === 'function') {
@@ -226,7 +257,7 @@ function createPxProvider() {
     // ── Account helpers ───────────────────────────────────────
     getCurrentAccount() {
       this._refreshContexts();
-      const ctx = this._ctx?.accountCtx;
+      const ctx = this._readCtx('accountCtx');
       if (!ctx) return null;
       const acct = ctx.activeTradingAccount;
       // Normalize to the shape that the rest of the codebase expects
@@ -266,6 +297,9 @@ function createPxProvider() {
 
     /** PX has native account naming — skip nickname feature. */
     hasNicknameSupport: false,
+
+    /** PX has native breakeven — skip our implementation. */
+    hasBreakevenSupport: false,
 
     logTag: 'PX-Spacebar',
 

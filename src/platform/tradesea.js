@@ -91,6 +91,9 @@ function createTradeseaProvider() {
     /** Whether nicknames should be active on this platform. */
     hasNicknameSupport: true,
 
+    /** Whether our breakeven hotkey should be active. */
+    hasBreakevenSupport: true,
+
     // ── Logging prefix ────────────────────────────────────────
     logTag: 'TS-Spacebar',
   };
