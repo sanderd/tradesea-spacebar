@@ -61,7 +61,8 @@ const CONTEXT_MATCHERS = {
 
   contractCtx: (v) =>
     typeof v.getContractByContractId === 'function' &&
-    typeof v.getContractByProductId === 'function',
+    typeof v.getContractByProductId === 'function' &&
+    typeof v.getContractByContractName === 'function',
 
   domDataCtx: (v) =>
     v.tick !== undefined &&
@@ -154,8 +155,19 @@ function createPxProvider() {
       // symbolService adapter: chart.js expects getCurrentSymbol(), getTickSize(), getCurrentPrice()
       services.symbolService = {
         getCurrentSymbol() {
-          const dom = self._readCtx('domDataCtx');
-          return dom?.contract?.productId || null;
+          // Prefer TradingView's activeChart() — it tracks which pane the user
+          // last interacted with, giving correct multi-chart support.
+          // TV uses contractName (e.g. 'MNQU26'); map it to productId via contractCtx.
+          try {
+            const tvSym = S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
+            if (tvSym) {
+              const cc = self._readCtx('contractCtx');
+              const prod = cc?.getContractByContractName?.(tvSym)?.productId;
+              if (prod) return prod;
+            }
+          } catch (_) {}
+          // Fallback: domDataCtx productId (last-traded instrument)
+          return self._readCtx('domDataCtx')?.contract?.productId || null;
         },
         getTickSize() {
           const dom = self._readCtx('domDataCtx');
