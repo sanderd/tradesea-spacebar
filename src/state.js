@@ -21,6 +21,7 @@ export const S = {
   mousePrice: null,
   lastIframeMouseX: null,
   lastIframeMouseY: null,
+  hoveredChartSymbol: null, // TV contractName of the pane the mouse is currently over
   canvas: null,
   ctx: null,
   rafId: null,

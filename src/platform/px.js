@@ -155,18 +155,19 @@ function createPxProvider() {
       // symbolService adapter: chart.js expects getCurrentSymbol(), getTickSize(), getCurrentPrice()
       services.symbolService = {
         getCurrentSymbol() {
-          // Prefer TradingView's activeChart() — it tracks which pane the user
-          // last interacted with, giving correct multi-chart support.
-          // TV uses contractName (e.g. 'MNQU26'); map it to productId via contractCtx.
+          // S.hoveredChartSymbol is set by getPaneCanvasRect() using .chart-container.active,
+          // which TV updates on hover — not just click. This gives correct multi-chart support.
+          // Falls back to activeChart() (click-driven) if hover symbol isn't available yet.
           try {
-            const tvSym = S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
+            const tvSym = S.hoveredChartSymbol
+              || S.iframeWin?.tradingViewApi?.activeChart?.()?.symbol?.();
             if (tvSym) {
               const cc = self._readCtx('contractCtx');
               const prod = cc?.getContractByContractName?.(tvSym)?.productId;
               if (prod) return prod;
             }
           } catch (_) {}
-          // Fallback: domDataCtx productId (last-traded instrument)
+          // Final fallback: domDataCtx productId (last-traded instrument)
           return self._readCtx('domDataCtx')?.contract?.productId || null;
         },
         getTickSize() {

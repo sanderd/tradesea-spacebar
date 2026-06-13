@@ -72,13 +72,36 @@ function priceToCoord(price) {
 //     + IFRAME RECT (main-doc-relative, for canvas drawing)
 // ═══════════════════════════════════════════════════════════════════
 
-/** Bounding rect of the main price pane canvas, relative to the iframe viewport. */
+/** Bounding rect of the main price pane canvas, relative to the iframe viewport.
+ * Also updates S.hoveredChartSymbol with the TV symbol of the hovered chart pane. */
 function getPaneCanvasRect() {
   if (!S.iframeDoc) return null;
   try {
     const container = S.iframeDoc.querySelector('.chart-container.active')
       || S.iframeDoc.querySelector('.chart-container');
     if (!container) return null;
+
+    // Track which TV chart symbol is under the mouse.
+    // .chart-container.active updates on hover (not just click), so we use it
+    // to find the hovered chart and store its contractName in S.hoveredChartSymbol.
+    try {
+      const api = S.iframeWin?.tradingViewApi;
+      if (api) {
+        const count = api.chartsCount?.() ?? 1;
+        for (let i = 0; i < count; i++) {
+          const chart = api.chart(i);
+          const panes = chart?.getPanes?.();
+          if (!panes?.length) continue;
+          // Each pane exposes getHTMLElement() — check if it lives in this container
+          const paneEl = panes[0]?.getHTMLElement?.();
+          if (paneEl && container.contains(paneEl)) {
+            S.hoveredChartSymbol = chart.symbol?.() || null;
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+
     const wrapper = container.querySelector('.chart-gui-wrapper');
     if (wrapper) {
       const c = wrapper.querySelector('canvas');
